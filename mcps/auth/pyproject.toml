@@ -1,0 +1,10 @@
+[project]
+name = "claude-auth"
+version = "0.1.0"
+description = "Auth MCP - 1Password integration for Claude"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "uvicorn>=0.30.0",
+    "onepassword-sdk>=0.1.0",
+]

@@ -1,0 +1,37 @@
+# Environment and secrets
+config/.env
+config/*.env.local
+.env
+*.env.local
+
+# Personal domains (keep in separate private repo)
+domains/*
+!domains/_template/
+!domains/super-claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker build artifacts
+*.tar

@@ -1,0 +1,14 @@
+[project]
+name = "super-claude"
+version = "0.1.0"
+description = "Super Claude MCP - Auth, Filesystem, Shell, Docker tools"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "uvicorn>=0.30.0",
+    "onepassword-sdk>=0.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

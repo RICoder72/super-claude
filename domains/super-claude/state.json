@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "lastDeploy": "2024-12-27",
+  "containerName": "super-claude",
+  "status": "active",
+  "notes": [
+    "Initial deployment with auth, fs, shell, docker tools",
+    "Docker API version pinned to 1.41 for Synology compatibility"
+  ]
+}
