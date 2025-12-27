@@ -6,12 +6,15 @@ Central MCP providing:
 - Filesystem: Read, write, delete, move files within sandbox
 - Shell: Execute commands
 - Docker: Container management
+- Context: Domain-specific knowledge loading
 - Ops: Rebuild ops container (mutual administration)
 """
 
 from fastmcp import FastMCP
 import subprocess
+import json
 from pathlib import Path
+from datetime import datetime
 
 # Import 1Password helper
 import sys
@@ -48,6 +51,10 @@ def _run_command(command: str, timeout: int = 30) -> tuple[bool, str]:
     except Exception as e:
         return False, f"Error: {e}"
 
+def _get_domain_path(domain: str) -> Path:
+    """Get path for a domain"""
+    return SUPER_CLAUDE_ROOT / "domains" / domain
+
 # =============================================================================
 # HEALTH
 # =============================================================================
@@ -55,6 +62,149 @@ def _run_command(command: str, timeout: int = 30) -> tuple[bool, str]:
 def ping() -> str:
     """Health check. Returns pong if the auth MCP is running."""
     return "pong from Super Claude 🚀"
+
+# =============================================================================
+# CONTEXT SYSTEM
+# =============================================================================
+@mcp.tool()
+def context_load(domain: str) -> str:
+    """
+    Load domain context - the core {domain}.md file that establishes working context.
+    
+    Args:
+        domain: Domain name (e.g., "msf", "grc", "super-claude")
+    
+    Returns:
+        Domain context content or error message
+    """
+    domain_path = _get_domain_path(domain)
+    context_file = domain_path / f"{domain}.md"
+    
+    if not domain_path.exists():
+        return f"❌ Domain '{domain}' does not exist"
+    if not context_file.exists():
+        return f"❌ Context file not found: {domain}.md"
+    
+    try:
+        content = context_file.read_text()
+        # Update last session in state.json
+        state_file = domain_path / "state.json"
+        if state_file.exists():
+            try:
+                state = json.loads(state_file.read_text())
+                state["lastSession"] = datetime.now().isoformat()[:10]
+                state_file.write_text(json.dumps(state, indent=2))
+            except:
+                pass  # Don't fail if state update fails
+        
+        return f"📖 Loaded domain: {domain}\n\n{content}"
+    except Exception as e:
+        return f"❌ Error loading context: {e}"
+
+@mcp.tool()
+def context_get(domain: str, file: str) -> str:
+    """
+    Get specific context file from domain's context/ directory.
+    
+    Args:
+        domain: Domain name
+        file: File name within domain/context/
+    
+    Returns:
+        File content or error message
+    """
+    domain_path = _get_domain_path(domain)
+    context_dir = domain_path / "context"
+    target_file = context_dir / file
+    
+    if not domain_path.exists():
+        return f"❌ Domain '{domain}' does not exist"
+    if not context_dir.exists():
+        return f"❌ Context directory not found for domain '{domain}'"
+    if not target_file.exists():
+        return f"❌ Context file not found: {file}"
+    
+    try:
+        content = target_file.read_text()
+        return f"📄 {domain}/context/{file}\n\n{content}"
+    except Exception as e:
+        return f"❌ Error reading context file: {e}"
+
+@mcp.tool()
+def context_update(domain: str, key: str, value: str) -> str:
+    """
+    Update domain state.json with key-value data.
+    
+    Args:
+        domain: Domain name
+        key: State key to update
+        value: State value (will be JSON parsed if possible)
+    
+    Returns:
+        Success message or error
+    """
+    domain_path = _get_domain_path(domain)
+    state_file = domain_path / "state.json"
+    
+    if not domain_path.exists():
+        return f"❌ Domain '{domain}' does not exist"
+    
+    # Load or create state
+    if state_file.exists():
+        try:
+            state = json.loads(state_file.read_text())
+        except json.JSONDecodeError:
+            state = {}
+    else:
+        state = {"created": datetime.now().isoformat()[:10]}
+    
+    # Try to parse value as JSON, fall back to string
+    try:
+        parsed_value = json.loads(value)
+    except json.JSONDecodeError:
+        parsed_value = value
+    
+    # Update state
+    state[key] = parsed_value
+    state["lastUpdated"] = datetime.now().isoformat()[:10]
+    
+    try:
+        state_file.write_text(json.dumps(state, indent=2))
+        return f"✅ Updated {domain} state: {key} = {parsed_value}"
+    except Exception as e:
+        return f"❌ Error updating state: {e}"
+
+@mcp.tool()
+def context_list() -> str:
+    """
+    List all available domains.
+    
+    Returns:
+        Formatted list of domains with status
+    """
+    domains_dir = SUPER_CLAUDE_ROOT / "domains"
+    if not domains_dir.exists():
+        return "❌ Domains directory not found"
+    
+    domains = []
+    for item in sorted(domains_dir.iterdir()):
+        if item.is_dir() and not item.name.startswith("_"):
+            # Check for core files
+            has_md = (item / f"{item.name}.md").exists()
+            has_state = (item / "state.json").exists()
+            has_context = (item / "context").exists()
+            
+            status = "✅" if has_md else "⚠️"
+            details = []
+            if has_md: details.append("md")
+            if has_state: details.append("state")
+            if has_context: details.append("context")
+            
+            domains.append(f"{status} {item.name} ({', '.join(details)})")
+    
+    header = "📚 Available Domains\n" + "─" * 30
+    listing = "\n".join(domains) if domains else "(no domains found)"
+    return f"{header}\n{listing}"
 
 # =============================================================================
 # AUTH TOOLS
