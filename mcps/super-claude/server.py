@@ -27,6 +27,7 @@ mcp = FastMCP("Super Claude")
 # CONFIG
 # =============================================================================
 SUPER_CLAUDE_ROOT = Path("/data")  # Mounted volume: /volume1/docker/super-claude
+DOCKER_NETWORK = "super-claude_super-claude-net"
 
 # =============================================================================
 # HELPERS
@@ -588,10 +589,11 @@ def rebuild_ops() -> str:
     _run_command("docker rm super-claude-ops")
     steps.append("   ✅ Stopped and removed")
     
-    # Step 3: Start new container
+    # Step 3: Start new container with network
     steps.append("3️⃣ Starting new container...")
-    run_cmd = """docker run -d \
+    run_cmd = f"""docker run -d \
         --name super-claude-ops \
+        --network {DOCKER_NETWORK} \
         --env-file /data/config/.env \
         -p 8001:8001 \
         -v /volume1/docker/super-claude:/data \
