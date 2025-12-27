@@ -27,3 +27,13 @@
 - Connected as custom connector in Claude
 - Successfully called ping tool from Claude mobile
 - **Result**: Full path proven working
+
+
+### Session: Ops MCP & Path-Based Routing
+- Created super-claude-ops MCP for mutual administration
+- Added nginx router for path-based routing (/mcp, /ops)
+- Created docker-compose.yml for unified deployment
+- Both MCPs now accessible on port 443
+- Ops can rebuild super-claude, super-claude can rebuild ops
+- Added backup/restore and git tools to ops
+- Pushed all changes to GitHub

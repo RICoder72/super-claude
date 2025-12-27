@@ -1,10 +1,18 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "lastDeploy": "2024-12-27",
+  "lastSession": "2024-12-27",
   "containerName": "super-claude",
   "status": "active",
+  "architecture": "docker-compose with nginx router",
+  "endpoints": {
+    "main": "https://zanni.synology.me/mcp",
+    "ops": "https://zanni.synology.me/ops"
+  },
   "notes": [
-    "Initial deployment with auth, fs, shell, docker tools",
-    "Docker API version pinned to 1.41 for Synology compatibility"
+    "Path-based routing via nginx on :8080",
+    "Both MCPs accessible on port 443",
+    "Mutual rebuild capability working",
+    "Git integration working"
   ]
 }
