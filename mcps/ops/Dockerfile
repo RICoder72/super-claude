@@ -29,6 +29,9 @@ COPY mcps/ops/ /app/
 # Install dependencies
 RUN uv pip install --system -e .
 
+# Configure git to trust the /data directory
+RUN git config --global --add safe.directory /data
+
 EXPOSE 8001
 
 CMD ["python", "server.py"]
