@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.1",
   "lastDeploy": "2024-12-27",
   "lastSession": "2024-12-27",
   "containerName": "super-claude",
@@ -9,10 +9,11 @@
     "main": "https://zanni.synology.me/mcp",
     "ops": "https://zanni.synology.me/ops"
   },
+  "network": "super-claude_super-claude-net",
   "notes": [
-    "Path-based routing via nginx on :8080",
-    "Both MCPs accessible on port 443",
-    "Mutual rebuild capability working",
-    "Git integration working"
+    "All 3 containers must be on super-claude_super-claude-net",
+    "Rebuild commands now include --network flag automatically",
+    "Context tools added: context_load, context_get, context_update, context_list",
+    "Session protocol established for persistent context"
   ]
 }
