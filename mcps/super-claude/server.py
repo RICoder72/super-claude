@@ -6,6 +6,7 @@ Central MCP providing:
 - Filesystem: Read, write, delete, move files within sandbox
 - Shell: Execute commands
 - Docker: Container management
+- Ops: Rebuild ops container (mutual administration)
 """
 
 from fastmcp import FastMCP
@@ -23,6 +24,29 @@ mcp = FastMCP("Super Claude")
 # CONFIG
 # =============================================================================
 SUPER_CLAUDE_ROOT = Path("/data")  # Mounted volume: /volume1/docker/super-claude
+
+# =============================================================================
+# HELPERS
+# =============================================================================
+def _run_command(command: str, timeout: int = 30) -> tuple[bool, str]:
+    """Run shell command, return (success, output)"""
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(SUPER_CLAUDE_ROOT)
+        )
+        output = result.stdout
+        if result.stderr:
+            output += f"\n[stderr] {result.stderr}"
+        return result.returncode == 0, output.strip()
+    except subprocess.TimeoutExpired:
+        return False, f"Command timed out after {timeout}s"
+    except Exception as e:
+        return False, f"Error: {e}"
 
 # =============================================================================
 # HEALTH
@@ -386,6 +410,55 @@ def docker_start(container: str) -> str:
     if "Error" not in result:
         return f"✅ Started: {container}"
     return result
+
+# =============================================================================
+# OPS MANAGEMENT (Mutual Administration)
+# =============================================================================
+@mcp.tool()
+def rebuild_ops() -> str:
+    """
+    Full rebuild of super-claude-ops container.
+    Stops, removes, rebuilds image, and restarts.
+    
+    This is the mutual administration capability - super-claude can rebuild ops,
+    and ops can rebuild super-claude.
+    """
+    steps = ["🔧 Rebuilding Ops from Super Claude...", ""]
+    
+    # Step 1: Build new image
+    steps.append("1️⃣ Building image...")
+    success, output = _run_command("docker build -t super-claude-ops -f mcps/ops/Dockerfile .", timeout=300)
+    if not success:
+        return "\n".join(steps) + f"\n❌ Build failed:\n{output}"
+    steps.append("   ✅ Image built")
+    
+    # Step 2: Stop and remove old container
+    steps.append("2️⃣ Stopping old container...")
+    _run_command("docker stop super-claude-ops")
+    _run_command("docker rm super-claude-ops")
+    steps.append("   ✅ Stopped and removed")
+    
+    # Step 3: Start new container
+    steps.append("3️⃣ Starting new container...")
+    run_cmd = """docker run -d \
+        --name super-claude-ops \
+        --env-file /data/config/.env \
+        -p 8001:8001 \
+        -v /volume1/docker/super-claude:/data \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        --restart unless-stopped \
+        super-claude-ops"""
+    success, output = _run_command(run_cmd)
+    if not success:
+        return "\n".join(steps) + f"\n❌ Run failed:\n{output}"
+    steps.append("   ✅ Started")
+    
+    steps.append("")
+    steps.append("✅ Ops rebuilt successfully!")
+    steps.append("")
+    steps.append("⚠️  Remember: Disconnect and reconnect the Ops connector, then start a new chat.")
+    
+    return "\n".join(steps)
 
 # =============================================================================
 # MAIN
