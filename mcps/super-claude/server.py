@@ -7,6 +7,7 @@ Central MCP providing:
 - Shell: Execute commands
 - Docker: Container management
 - Context: Domain-specific knowledge loading
+- Publish: Output files to web-accessible location
 - Ops: Rebuild ops container (mutual administration)
 """
 
@@ -28,6 +29,8 @@ mcp = FastMCP("Super Claude")
 # =============================================================================
 SUPER_CLAUDE_ROOT = Path("/data")  # Mounted volume: /volume1/docker/super-claude
 DOCKER_NETWORK = "super-claude_super-claude-net"
+OUTPUTS_DIR = SUPER_CLAUDE_ROOT / "outputs"
+PUBLIC_BASE_URL = "https://zanni.synology.me/super-claude-output"
 
 # =============================================================================
 # HELPERS
@@ -445,6 +448,108 @@ def fs_copy(source: str, destination: str) -> str:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
     return f"✅ Copied: {source} → {destination}"
+
+# =============================================================================
+# PUBLISH TOOLS
+# =============================================================================
+@mcp.tool()
+def publish(source: str, dest_name: str = None, domain: str = None) -> str:
+    """
+    Publish a file to the outputs directory for external access.
+    
+    Args:
+        source: Source file path relative to super-claude root
+        dest_name: Optional destination filename (defaults to source filename)
+        domain: Optional domain folder to organize under (e.g., "entertainment", "msf")
+    
+    Returns:
+        Public URL for the published file
+    """
+    import shutil
+    
+    src = _validate_path(source)
+    if not src.exists():
+        return f"❌ Source does not exist: {source}"
+    if not src.is_file():
+        return f"❌ Source is not a file: {source}"
+    
+    # Determine destination
+    filename = dest_name or src.name
+    if domain:
+        dest_dir = OUTPUTS_DIR / domain
+    else:
+        dest_dir = OUTPUTS_DIR
+    
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / filename
+    
+    # Copy file
+    shutil.copy2(src, dest)
+    
+    # Build URL
+    if domain:
+        url = f"{PUBLIC_BASE_URL}/{domain}/{filename}"
+    else:
+        url = f"{PUBLIC_BASE_URL}/{filename}"
+    
+    return f"✅ Published: {filename}\n📎 {url}"
+
+@mcp.tool()
+def publish_list(domain: str = None) -> str:
+    """
+    List published files.
+    
+    Args:
+        domain: Optional domain to filter by
+    
+    Returns:
+        List of published files with URLs
+    """
+    if not OUTPUTS_DIR.exists():
+        return "📂 No outputs published yet"
+    
+    target = OUTPUTS_DIR / domain if domain else OUTPUTS_DIR
+    if not target.exists():
+        return f"📂 No outputs for domain: {domain}" if domain else "📂 No outputs published yet"
+    
+    files = []
+    for item in sorted(target.rglob("*")):
+        if item.is_file():
+            rel_path = item.relative_to(OUTPUTS_DIR)
+            url = f"{PUBLIC_BASE_URL}/{rel_path}"
+            size = item.stat().st_size
+            files.append(f"📄 {rel_path} ({size} bytes)\n   {url}")
+    
+    if not files:
+        return "📂 No outputs published yet"
+    
+    header = f"📤 Published Outputs" + (f" ({domain})" if domain else "") + "\n" + "─" * 40
+    return f"{header}\n" + "\n".join(files)
+
+@mcp.tool()
+def unpublish(path: str) -> str:
+    """
+    Remove a published file.
+    
+    Args:
+        path: Path relative to outputs (e.g., "entertainment/watchlist.md")
+    
+    Returns:
+        Success or error message
+    """
+    target = OUTPUTS_DIR / path
+    
+    # Security check - must be within outputs
+    if not str(target.resolve()).startswith(str(OUTPUTS_DIR.resolve())):
+        return f"❌ Invalid path: {path}"
+    
+    if not target.exists():
+        return f"❌ Not found: {path}"
+    if not target.is_file():
+        return f"❌ Not a file: {path}"
+    
+    target.unlink()
+    return f"✅ Unpublished: {path}"
 
 # =============================================================================
 # SHELL TOOLS

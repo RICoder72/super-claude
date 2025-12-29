@@ -1,7 +1,7 @@
 {
   "version": "0.3.1",
   "lastDeploy": "2024-12-27",
-  "lastSession": "2024-12-27",
+  "lastSession": "2025-12-28",
   "containerName": "super-claude",
   "status": "active",
   "architecture": "docker-compose with nginx router",
@@ -15,5 +15,27 @@
     "Rebuild commands now include --network flag automatically",
     "Context tools added: context_load, context_get, context_update, context_list",
     "Session protocol established for persistent context"
+  ],
+  "openSourcePrep": {
+    "sampleDomains": {
+      "entertainment": "complete - simple showcase for movie/TV recs",
+      "pythonLab": "planned - complex showcase with own MCP/container"
+    },
+    "openQuestions": [
+      "Domain triggering UX - natural invocation without explicit commands",
+      "Hands-free voice interface - wake word or always-on Claude triggering"
+    ]
+  },
+  "lastUpdated": "2025-12-29",
+  "recentChanges": [
+    "2025-12-28: Added publish system (publish, publish_list, unpublish tools)",
+    "2025-12-28: Static file serving at /super-claude-output/",
+    "2025-12-28: Learned not to stop router without backup path"
+  ],
+  "backlog": [
+    "Guardrails: Prevent shell_exec from stopping/removing critical containers (super-claude, super-claude-ops, super-claude-router)",
+    "Cloudflare: Partially configured for ricoder.me - nameservers pointed, needs DNS records for subdomains if we want backup MCP path",
+    "Self-recovery: Watchdog or webhook to restart router without SSH",
+    "Port testing: Determine which ports Claude.ai MCP connectors actually accept"
   ]
 }

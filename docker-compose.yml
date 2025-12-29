@@ -9,6 +9,7 @@ services:
       - "8080:8080"
     volumes:
       - ./router/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /volume1/docker/super-claude/outputs:/outputs:ro
     depends_on:
       - super-claude
       - super-claude-ops
