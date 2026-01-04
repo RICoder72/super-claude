@@ -14,12 +14,17 @@
 ✅ Token expiry tracking with warnings
 ✅ Natural domain invocation via keywords (session_start)
 
-## Next: v0.6.0 - Resilience & Guardrails
+## Next: v0.6.0 - Smarter Context
+- [ ] Domain creation prompt: Offer to create a domain when none detected
+- [ ] Cross-domain search: `context_search` tool to find relevant info across all domains
+- [ ] Domain templates: Streamline new domain creation with scaffolding
+
+## Planned: v0.7.0 - Resilience & Guardrails
 - [ ] Guardrails: Prevent shell_exec from stopping critical containers
 - [ ] Self-recovery: Watchdog to restart router without SSH
 - [ ] Cloudflare: Complete setup for ricoder.me as backup path
 
-## Planned: v0.7.0 - More Domains
+## Planned: v0.8.0 - More Domains
 - [ ] MSF domain migration
 - [ ] GRC domain setup
 - [ ] Projects domain enhancement

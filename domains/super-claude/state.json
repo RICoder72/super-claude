@@ -50,6 +50,8 @@
     "2025-12-28: Static file serving at /super-claude-output/"
   ],
   "backlog": [
+    "Domain creation prompt: If no domain detected, offer to create one for the conversation topic",
+    "Cross-domain search: Tool to search other domains for relevant context (context_search)",
     "Guardrails: Prevent shell_exec from stopping/removing critical containers",
     "Cloudflare: Partially configured for ricoder.me - needs DNS records for backup path",
     "Self-recovery: Watchdog or webhook to restart router without SSH"
