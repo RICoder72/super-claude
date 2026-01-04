@@ -2,6 +2,7 @@
 Super Claude MCP Server
 
 Central MCP providing:
+- Session: Startup context loading and domain detection
 - Auth: 1Password secret retrieval
 - Filesystem: Read, write, delete, move files within sandbox
 - Shell: Execute commands
@@ -32,6 +33,15 @@ SUPER_CLAUDE_ROOT = Path("/data")  # Mounted volume: /volume1/docker/super-claud
 DOCKER_NETWORK = "super-claude_super-claude-net"
 OUTPUTS_DIR = SUPER_CLAUDE_ROOT / "outputs"
 PUBLIC_BASE_URL = "https://zanni.synology.me/super-claude-output"
+
+# Domain keywords for auto-detection
+DOMAIN_KEYWORDS = {
+    "super-claude": ["super claude", "super-claude", "mcp", "infrastructure", "docker", "container", "server", "oauth", "authentication"],
+    "projects": ["project", "task", "todo", "backlog"],
+    # Add more domains and their trigger keywords here
+    # "msf": ["msf", "magic", "game", "deck", "commander"],
+    # "grc": ["grc", "compliance", "audit", "risk", "control"],
+}
 
 # =============================================================================
 # HELPERS
@@ -91,12 +101,112 @@ def _check_token_expiry() -> str | None:
     except Exception:
         return None
 
+def _detect_domain(text: str) -> str | None:
+    """Detect domain from text based on keywords. Returns domain name or None."""
+    text_lower = text.lower()
+    for domain, keywords in DOMAIN_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in text_lower:
+                return domain
+    return None
+
+def _get_available_domains() -> list[dict]:
+    """Get list of available domains with their descriptions."""
+    domains_dir = SUPER_CLAUDE_ROOT / "domains"
+    if not domains_dir.exists():
+        return []
+    
+    domains = []
+    for item in sorted(domains_dir.iterdir()):
+        if item.is_dir() and not item.name.startswith("_"):
+            domain_md = item / f"{item.name}.md"
+            state_file = item / "state.json"
+            
+            # Get description from first line of domain.md or state.json
+            description = ""
+            if domain_md.exists():
+                try:
+                    first_lines = domain_md.read_text().split("\n")[:3]
+                    for line in first_lines:
+                        if line.strip() and not line.startswith("#"):
+                            description = line.strip()[:100]
+                            break
+                except:
+                    pass
+            
+            domains.append({
+                "name": item.name,
+                "description": description,
+                "has_context": (item / "context").exists(),
+                "keywords": DOMAIN_KEYWORDS.get(item.name, [])
+            })
+    
+    return domains
+
+# =============================================================================
+# SESSION START - CALL THIS FIRST
+# =============================================================================
+@mcp.tool()
+def session_start(user_message: str = "") -> str:
+    """
+    Initialize a Super Claude session. Call this at the START of every conversation
+    to load Matthew's context, check system status, and detect relevant domains.
+    
+    This tool should be called AUTOMATICALLY when:
+    - Starting any new conversation where Super Claude tools might be useful
+    - The user mentions anything related to infrastructure, projects, or personal systems
+    - You need context about Matthew's setup, preferences, or ongoing work
+    
+    Args:
+        user_message: The user's first message (used to auto-detect relevant domain)
+    
+    Returns:
+        Session context including detected domain, system status, and available domains
+    """
+    lines = ["🚀 Super Claude Session Started", "─" * 40, ""]
+    
+    # Check token status
+    token_warning = _check_token_expiry()
+    if token_warning:
+        lines.append(token_warning)
+        lines.append("")
+    
+    # Get available domains
+    domains = _get_available_domains()
+    if domains:
+        lines.append("📚 Available Domains:")
+        for d in domains:
+            keywords_hint = f" (triggers: {', '.join(d['keywords'][:3])})" if d['keywords'] else ""
+            lines.append(f"   • {d['name']}{keywords_hint}")
+        lines.append("")
+    
+    # Auto-detect domain from user message
+    detected = None
+    if user_message:
+        detected = _detect_domain(user_message)
+        if detected:
+            lines.append(f"🎯 Auto-detected domain: {detected}")
+            lines.append(f"   Loading context automatically...")
+            lines.append("")
+    
+    # Load detected domain context
+    if detected:
+        domain_content = context_load(detected)
+        lines.append(domain_content)
+    else:
+        lines.append("💡 No specific domain detected. Say 'let's work on [domain]' or ask about:")
+        lines.append("   • Super Claude infrastructure, Docker, MCP")
+        lines.append("   • Projects, tasks, backlog")
+        lines.append("   • Or any registered domain")
+    
+    return "\n".join(lines)
+
 # =============================================================================
 # HEALTH & TOKEN STATUS
 # =============================================================================
 @mcp.tool()
 def ping() -> str:
-    """Health check. Returns pong if the auth MCP is running."""
+    """Health check. Returns pong if Super Claude is running."""
     response = "pong from Super Claude 🚀"
     
     # Check for token expiry warning
@@ -208,13 +318,18 @@ def token_record(subject: str, issued_at: str, expires_at: str) -> str:
 @mcp.tool()
 def context_load(domain: str) -> str:
     """
-    Load domain context - the core {domain}.md file that establishes working context.
+    Load domain context for a specific area of work.
+    
+    Call this AUTOMATICALLY when the user mentions or asks about:
+    - "super-claude" / "infrastructure" / "mcp" / "docker" → load super-claude
+    - "project" / "task" / "backlog" → load projects
+    - Or any other registered domain by name
     
     Args:
-        domain: Domain name (e.g., "msf", "grc", "super-claude")
+        domain: Domain name (e.g., "super-claude", "projects", "msf", "grc")
     
     Returns:
-        Domain context content or error message
+        Domain context content including goals, state, and how to help
     """
     domain_path = _get_domain_path(domain)
     context_file = domain_path / f"{domain}.md"
@@ -245,6 +360,10 @@ def context_get(domain: str, file: str) -> str:
     """
     Get specific context file from domain's context/ directory.
     
+    Use this for detailed reference material like:
+    - changelog.md, roadmap.md, decisions.md
+    - Domain-specific docs (rules, guides, references)
+    
     Args:
         domain: Domain name
         file: File name within domain/context/
@@ -273,6 +392,11 @@ def context_get(domain: str, file: str) -> str:
 def context_update(domain: str, key: str, value: str) -> str:
     """
     Update domain state.json with key-value data.
+    
+    Use this to persist information between sessions:
+    - Current focus or active work items
+    - Decisions made during conversation
+    - Preferences or settings
     
     Args:
         domain: Domain name
@@ -316,10 +440,10 @@ def context_update(domain: str, key: str, value: str) -> str:
 @mcp.tool()
 def context_list() -> str:
     """
-    List all available domains.
+    List all available domains and their status.
     
     Returns:
-        Formatted list of domains with status
+        Formatted list of domains with their trigger keywords
     """
     domains_dir = SUPER_CLAUDE_ROOT / "domains"
     if not domains_dir.exists():
@@ -339,7 +463,11 @@ def context_list() -> str:
             if has_state: details.append("state")
             if has_context: details.append("context")
             
-            domains.append(f"{status} {item.name} ({', '.join(details)})")
+            # Include keywords if registered
+            keywords = DOMAIN_KEYWORDS.get(item.name, [])
+            keywords_str = f" → triggers: {', '.join(keywords[:3])}" if keywords else ""
+            
+            domains.append(f"{status} {item.name} ({', '.join(details)}){keywords_str}")
     
     header = "📚 Available Domains\n" + "─" * 30
     listing = "\n".join(domains) if domains else "(no domains found)"
@@ -692,7 +820,7 @@ def unpublish(path: str) -> str:
 @mcp.tool()
 def shell_exec(command: str, timeout: int = 30) -> str:
     """
-    Execute shell command.
+    Execute shell command in the Super Claude container.
     
     Args:
         command: Shell command to execute
