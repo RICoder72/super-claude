@@ -37,3 +37,20 @@
 - Ops can rebuild super-claude, super-claude can rebuild ops
 - Added backup/restore and git tools to ops
 - Pushed all changes to GitHub
+
+
+## 2026-01-04
+
+### Session: OAuth Authentication
+- Added OAuth 2.0 authentication with authorization_code + PKCE flow
+- Created `auth-service/` with JWT token generation and validation
+- Nginx router now requires authentication for `/mcp` and `/ops` endpoints
+- Claude.ai connectors use OAuth client credentials flow
+- JWT secret stored in 1Password (`Super Claude JWT Secret`)
+- OAuth credentials stored in 1Password (`Super Claude OAuth Credentials`)
+- Added token expiry tracking:
+  - `token_status()` tool shows days remaining
+  - `token_record()` tool records new token info
+  - `ping()` warns when token expires within 14 days
+- Tokens valid for 180 days (expires 2026-07-03)
+- Both Super Claude and Super Claude Ops secured with same OAuth credentials

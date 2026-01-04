@@ -9,6 +9,7 @@ Central MCP providing:
 - Context: Domain-specific knowledge loading
 - Publish: Output files to web-accessible location
 - Ops: Rebuild ops container (mutual administration)
+- Token: JWT token status and expiry tracking
 """
 
 from fastmcp import FastMCP
@@ -59,13 +60,147 @@ def _get_domain_path(domain: str) -> Path:
     """Get path for a domain"""
     return SUPER_CLAUDE_ROOT / "domains" / domain
 
+def _check_token_expiry() -> str | None:
+    """Check if token is expiring soon. Returns warning message or None."""
+    try:
+        state_file = SUPER_CLAUDE_ROOT / "domains" / "super-claude" / "state.json"
+        if not state_file.exists():
+            return None
+        
+        state = json.loads(state_file.read_text())
+        auth = state.get("auth", {})
+        token_info = auth.get("token", {})
+        
+        expires_at = token_info.get("expiresAt")
+        if not expires_at:
+            return None
+        
+        # Parse expiration date
+        exp_date = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        now = datetime.now(exp_date.tzinfo) if exp_date.tzinfo else datetime.now()
+        days_until = (exp_date - now).days
+        
+        warn_days = token_info.get("warnDaysBefore", 14)
+        
+        if days_until < 0:
+            return f"🚨 TOKEN EXPIRED {abs(days_until)} days ago! Generate a new token immediately."
+        elif days_until <= warn_days:
+            return f"⚠️ Token expires in {days_until} days ({expires_at[:10]}). Consider generating a new token."
+        
+        return None
+    except Exception:
+        return None
+
 # =============================================================================
-# HEALTH
+# HEALTH & TOKEN STATUS
 # =============================================================================
 @mcp.tool()
 def ping() -> str:
     """Health check. Returns pong if the auth MCP is running."""
-    return "pong from Super Claude 🚀"
+    response = "pong from Super Claude 🚀"
+    
+    # Check for token expiry warning
+    warning = _check_token_expiry()
+    if warning:
+        response += f"\n\n{warning}"
+    
+    return response
+
+
+@mcp.tool()
+def token_status() -> str:
+    """
+    Check the status of the current authentication token.
+    
+    Returns:
+        Token status including expiration info and any warnings
+    """
+    try:
+        state_file = SUPER_CLAUDE_ROOT / "domains" / "super-claude" / "state.json"
+        if not state_file.exists():
+            return "❌ State file not found"
+        
+        state = json.loads(state_file.read_text())
+        auth = state.get("auth", {})
+        
+        if not auth.get("enabled"):
+            return "🔓 Authentication is not enabled"
+        
+        token_info = auth.get("token", {})
+        
+        issued = token_info.get("issuedAt", "Unknown")
+        expires = token_info.get("expiresAt", "Unknown")
+        subject = token_info.get("subject", "Unknown")
+        
+        lines = [
+            "🔐 Token Status",
+            "─" * 30,
+            f"Subject: {subject}",
+            f"Issued:  {issued[:10] if issued != 'Unknown' else 'Unknown'}",
+            f"Expires: {expires[:10] if expires != 'Unknown' else 'Unknown'}",
+        ]
+        
+        # Calculate days remaining
+        if expires != "Unknown":
+            try:
+                exp_date = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+                now = datetime.now(exp_date.tzinfo) if exp_date.tzinfo else datetime.now()
+                days_until = (exp_date - now).days
+                
+                if days_until < 0:
+                    lines.append(f"Status:  🚨 EXPIRED ({abs(days_until)} days ago)")
+                elif days_until <= 14:
+                    lines.append(f"Status:  ⚠️ Expiring soon ({days_until} days)")
+                else:
+                    lines.append(f"Status:  ✅ Valid ({days_until} days remaining)")
+            except Exception:
+                lines.append("Status:  ❓ Could not calculate")
+        
+        lines.append("")
+        lines.append("To generate a new token:")
+        lines.append("  node auth-service/jwt-utils.js generate claude-user 'read,write,admin' 180d")
+        
+        return "\n".join(lines)
+    except Exception as e:
+        return f"❌ Error checking token status: {e}"
+
+
+@mcp.tool()
+def token_record(subject: str, issued_at: str, expires_at: str) -> str:
+    """
+    Record token information after generating a new token.
+    
+    Args:
+        subject: Token subject/user ID
+        issued_at: ISO format issue date (e.g., "2026-01-04T12:00:00Z")
+        expires_at: ISO format expiration date (e.g., "2026-07-04T12:00:00Z")
+    
+    Returns:
+        Success or error message
+    """
+    try:
+        state_file = SUPER_CLAUDE_ROOT / "domains" / "super-claude" / "state.json"
+        if not state_file.exists():
+            return "❌ State file not found"
+        
+        state = json.loads(state_file.read_text())
+        
+        if "auth" not in state:
+            state["auth"] = {"enabled": True}
+        
+        state["auth"]["token"] = {
+            "subject": subject,
+            "issuedAt": issued_at,
+            "expiresAt": expires_at,
+            "warnDaysBefore": 14
+        }
+        state["lastUpdated"] = datetime.now().isoformat()[:10]
+        
+        state_file.write_text(json.dumps(state, indent=2))
+        
+        return f"✅ Token info recorded\n   Subject: {subject}\n   Expires: {expires_at[:10]}"
+    except Exception as e:
+        return f"❌ Error recording token: {e}"
 
 # =============================================================================
 # CONTEXT SYSTEM

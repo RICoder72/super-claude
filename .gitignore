@@ -1,5 +1,6 @@
 # Environment and secrets
 config/.env
+config/.env.auth
 config/*.env.local
 .env
 *.env.local
@@ -35,3 +36,6 @@ logs/
 
 # Docker build artifacts
 *.tar
+
+# Outputs (generated files)
+outputs/

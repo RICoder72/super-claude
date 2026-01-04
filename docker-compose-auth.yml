@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Path-based router with authentication
+  router:
+    image: nginx:alpine
+    container_name: super-claude-router
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./router/nginx-auth.conf:/etc/nginx/nginx.conf:ro
+      - /volume1/docker/super-claude/outputs:/outputs:ro
+    depends_on:
+      - super-claude
+      - super-claude-ops
+      - super-claude-auth
+    restart: unless-stopped
+    networks:
+      - super-claude-net
+
+  # JWT Authentication Service
+  super-claude-auth:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: super-claude-auth
+    env_file:
+      - config/.env.auth
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    networks:
+      - super-claude-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Main MCP
+  super-claude:
+    build:
+      context: .
+      dockerfile: mcps/super-claude/Dockerfile
+    container_name: super-claude
+    env_file:
+      - config/.env
+    volumes:
+      - /volume1/docker/super-claude:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - super-claude-net
+
+  # Ops MCP
+  super-claude-ops:
+    build:
+      context: .
+      dockerfile: mcps/ops/Dockerfile
+    container_name: super-claude-ops
+    env_file:
+      - config/.env
+    volumes:
+      - /volume1/docker/super-claude:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - super-claude-net
+
+networks:
+  super-claude-net:
+    driver: bridge
