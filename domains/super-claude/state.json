@@ -1,6 +1,6 @@
 {
-  "version": "0.5.0",
-  "lastDeploy": "2026-01-04",
+  "version": "0.6.0",
+  "lastDeploy": "2026-01-16",
   "lastSession": "2026-01-16",
   "containerName": "super-claude",
   "status": "active",
@@ -43,11 +43,11 @@
   },
   "lastUpdated": "2026-01-16",
   "recentChanges": [
+    "2026-01-16: Plugin system deployed - op_auth and supernote plugins live",
+    "2026-01-16: Fixed plugin loading (renamed onepassword\u2192op_auth, skip infra files)",
+    "2026-01-16: Added plugin management tools (plugin_status, plugin_reload, etc.)",
     "2026-01-11: Fixed FunctionTool bug (tools calling other tools)",
-    "2026-01-11: Claude Code setup with JWT token (expires 2026-07-10)",
-    "2026-01-11: Documented auth_set capability for creating secrets",
-    "2026-01-04: Natural domain invocation via session_start and keyword detection",
-    "2026-01-04: OAuth authentication with authorization_code + PKCE flow"
+    "2026-01-11: Claude Code setup with JWT token (expires 2026-07-10)"
   ],
   "backlog": [
     "Chat-to-domain capture: Ability to summarize/save chat content to relevant domain before deletion",
@@ -71,6 +71,24 @@
         "Passphrase stored securely, verified in transcript"
       ],
       "status": "planned"
+    }
+  },
+  "plugins": {
+    "op_auth": {
+      "status": "active",
+      "tools": [
+        "auth_get",
+        "auth_set",
+        "auth_get_ref"
+      ]
+    },
+    "supernote": {
+      "status": "skeleton",
+      "tools": [
+        "supernote_sync_push",
+        "supernote_sync_pull",
+        "supernote_list_files"
+      ]
     }
   }
 }
