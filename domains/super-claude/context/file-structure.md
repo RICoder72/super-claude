@@ -41,7 +41,7 @@ What's in each folder and why.
 │   │
 │   └── {other domains}/          # MSF, GRC, etc.
 │
-└── outputs/                      # (future) Synology Drive synced outputs
+└── outputs/                      # Web-accessible published files
 ```
 
 ## Key Files Explained
@@ -49,15 +49,22 @@ What's in each folder and why.
 ### server.py
 The heart of Super Claude. Defines all MCP tools:
 - Health: `ping`
-- Auth: `auth_get`, `auth_get_ref`
+- Session: `session_start`
+- Auth: `auth_get`, `auth_get_ref`, `auth_set`
 - Filesystem: `fs_list`, `fs_read`, `fs_write`, `fs_delete`, `fs_mkdir`, `fs_rmdir`, `fs_move`, `fs_copy`, `fs_append`
 - Shell: `shell_exec`
 - Docker: `docker_ps`, `docker_logs`, `docker_restart`, `docker_stop`, `docker_start`
+- Context: `context_load`, `context_get`, `context_update`, `context_list`
+- Publish: `publish`, `publish_list`, `unpublish`
+- Token: `token_status`, `token_record`
+- Ops: `rebuild_ops`
 
 When you add a tool, add it here.
 
 ### op_client.py
-Shared 1Password integration. Uses the Python SDK to resolve secret references. Any MCP can import this to get secrets.
+Shared 1Password integration. Uses the Python SDK for secret management. Any MCP can import this.
+- **Read secrets**: `get_secret()`, `get_secret_by_ref()` 
+- **Create secrets**: `create_item()` - stores new API keys, tokens, credentials
 
 ### .env
 Contains `OP_SERVICE_ACCOUNT_TOKEN`. Never commit this to git. The deploy command uses `--env-file` to inject it.
@@ -76,7 +83,7 @@ Each domain follows the same pattern:
 | Shared Python code | `shared/` |
 | Secrets/tokens | `config/.env` + 1Password |
 | Domain knowledge | `domains/{name}/` |
-| Files to sync to devices | `outputs/` (future) |
+| Published files | `outputs/` |
 
 ## Git Strategy (Planned)
 

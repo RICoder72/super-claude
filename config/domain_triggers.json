@@ -1,0 +1,177 @@
+{
+  "health": {
+    "description": "Personal health management - medical conditions, diet, labs, progress tracking",
+    "triggers": [
+      "health",
+      "medical",
+      "diet",
+      "weight",
+      "labs",
+      "mediterranean",
+      "gluten",
+      "cpap",
+      "sleep apnea",
+      "cholesterol",
+      "liver",
+      "binge",
+      "calories",
+      "blood work",
+      "doctor"
+    ]
+  },
+  "bite-club": {
+    "description": "Bite Club mobile game development - Unity zombie RTS",
+    "triggers": [
+      "bite club",
+      "bite-club",
+      "zombie game",
+      "projecthorde",
+      "scarlett fever",
+      "tactical scene",
+      "hq scene",
+      "supreme commander"
+    ]
+  },
+  "burrillville": {
+    "description": "Director of Technology role - Town of Burrillville municipal/school/police IT",
+    "triggers": [
+      "burrillville",
+      "town",
+      "municipal",
+      "director of technology",
+      "school district",
+      "cjis",
+      "town hall",
+      "ferpa",
+      "e-rate",
+      "superintendent"
+    ]
+  },
+  "entertainment": {
+    "description": "TV and movie recommendations - personal taste profile",
+    "triggers": [
+      "movie",
+      "show",
+      "watch",
+      "netflix",
+      "streaming",
+      "recommend",
+      "what should i watch",
+      "horror",
+      "sci-fi"
+    ]
+  },
+  "gaming": {
+    "description": "Video games - library, recommendations, strategies, IC10 code, Steam integration",
+    "triggers": [
+      "video game",
+      "gaming",
+      "steam",
+      "stationeers",
+      "craft the world",
+      "factorio",
+      "rimworld",
+      "valheim",
+      "deep rock",
+      "drg survivor",
+      "satisfactory",
+      "what should i play",
+      "game recommendation",
+      "ic10",
+      "kerbal",
+      "grounded",
+      "against the storm",
+      "xcom",
+      "x-com",
+      "turn based",
+      "tactical",
+      "chimera squad",
+      "phoenix point"
+    ]
+  },
+  "maker": {
+    "description": "Electronics, microcontrollers, fabrication - Arduino, Pico, 3D printing",
+    "triggers": [
+      "arduino",
+      "pico",
+      "raspberry pi",
+      "electronics",
+      "kicad",
+      "3d print",
+      "cnc",
+      "dmx",
+      "shapeoko",
+      "bambu",
+      "x1c",
+      "freecad",
+      "pcb"
+    ]
+  },
+  "msf": {
+    "description": "Marvel Strike Force mobile game - roster tracking and strategy",
+    "triggers": [
+      "msf",
+      "marvel strike force",
+      "scopely",
+      "blitz",
+      "raid",
+      "web warriors"
+    ]
+  },
+  "politics": {
+    "description": "Political analysis and current events - facts over spin",
+    "triggers": [
+      "politics",
+      "political",
+      "news",
+      "current events",
+      "government",
+      "constitution",
+      "policy",
+      "scotus",
+      "supreme court",
+      "first amendment",
+      "free speech"
+    ]
+  },
+  "projects": {
+    "description": "Project tracking for Claude-assisted work",
+    "triggers": [
+      "project",
+      "task",
+      "todo",
+      "backlog",
+      "what should i work on"
+    ]
+  },
+  "quantum": {
+    "description": "Quantum mechanics exploration - philosophy of physics, Bell's theorem, free will",
+    "triggers": [
+      "quantum",
+      "bell's theorem",
+      "wave function",
+      "determinism",
+      "hidden variables",
+      "free will",
+      "cellular automata",
+      "chaos theory",
+      "consciousness",
+      "taoism"
+    ]
+  },
+  "super-claude": {
+    "description": "Super Claude DEVELOPMENT - building/maintaining this MCP infrastructure (not general Super Claude usage)",
+    "triggers": [
+      "super claude",
+      "super-claude",
+      "mcp",
+      "infrastructure",
+      "docker",
+      "container",
+      "synology",
+      "nas",
+      "1password",
+      "oauth"
+    ]
+  }
+}

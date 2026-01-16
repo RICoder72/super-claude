@@ -1,15 +1,18 @@
-# Super Claude
+# Super Claude (Development Domain)
+
+> **Meta note**: This domain is for *building and maintaining* Super Claude itself—the infrastructure, containers, MCP code, and domain system. All other domains *use* Super Claude; this one *is about* Super Claude. Load this when working on the system itself, not when using it for other purposes.
 
 Personal MCP infrastructure that gives Claude persistent context, external API access, and self-modification capabilities across all interfaces (mobile, web, Claude Code).
 
 ## What This Is
 
 A Docker-based MCP server running on Matthew's Synology NAS that provides:
-- **Auth tools**: 1Password secret retrieval
+- **Auth tools**: 1Password secret retrieval and storage
 - **Filesystem tools**: Read/write/manage files within the sandbox
 - **Shell tools**: Execute commands
 - **Docker tools**: Container management
-- **Context tools**: Domain-specific knowledge loading (planned)
+- **Context tools**: Domain-specific knowledge loading
+- **Publish tools**: Make files web-accessible
 
 ## Quick Reference
 
@@ -22,6 +25,9 @@ A Docker-based MCP server running on Matthew's Synology NAS that provides:
 | Run command | `shell_exec("command")` |
 | View containers | `docker_ps()` |
 | Get secret | `auth_get("item name")` |
+| Store secret | `auth_set("title", '{"credential": "value"}')` |
+| Load domain | `context_load("domain-name")` |
+| Publish file | `publish("path/to/file")` |
 
 ## Architecture
 
@@ -55,38 +61,28 @@ Domains are isolated knowledge areas. Each contains:
 - `state.json` - Lightweight session state.
 - `context/` - Reference files loaded on demand.
 
-**Active domains:** super-claude, projects
-**Planned domains:** msf, grc
+**Active domains**: See `context_list()` for current inventory.
 
 ## Infrastructure
 
 - **Host**: Synology RS1221+ with UPS
 - **Network**: Ubiquiti, DDNS via zanni.synology.me
-- **Container**: super-claude on port 8000 → 443 via reverse proxy
-- **Auth**: 1Password service account
+- **Containers**: super-claude (8000), super-claude-ops (8001), super-claude-router (8080)
+- **Auth**: 1Password service account + OAuth/JWT
+- **Docker network**: super-claude_super-claude-net (all containers must be on this)
 
-## Current Tools
+## Session Protocol
 
-| Tool | Purpose |
-|------|---------|
-| `ping` | Health check |
-| `auth_get` | Get secret by item name |
-| `auth_get_ref` | Get secret by full reference |
-| `fs_list` | List directory |
-| `fs_read` | Read file |
-| `fs_write` | Write/create file |
-| `fs_append` | Append to file |
-| `fs_delete` | Delete file |
-| `fs_mkdir` | Create directory |
-| `fs_rmdir` | Remove directory |
-| `fs_move` | Move/rename |
-| `fs_copy` | Copy file/directory |
-| `shell_exec` | Run shell command |
-| `docker_ps` | List containers |
-| `docker_logs` | View container logs |
-| `docker_restart` | Restart container |
-| `docker_stop` | Stop container |
-| `docker_start` | Start container |
+**In-flight:**
+- When something significant happens (decision, architecture change, new capability, blocker), ask: "Worth saving X to state?"
+- If yes, update state.json
+- Don't prompt for minor/obvious things
+
+**End-of-session:**
+- User says "wrap up" or "end session"
+- Review what happened, propose anything worth capturing
+- Ask if user has anything to add
+- Update state.json and close out
 
 ## Pointers
 
@@ -97,9 +93,11 @@ Domains are isolated knowledge areas. Each contains:
 | Day-to-day operations, troubleshooting | `context/operations.md` |
 | How to create/design domains | `context/domain-philosophy.md` |
 | What's in each folder | `context/file-structure.md` |
+| Claude Code integration | `context/claude-code-setup.md` |
 | Planned features | `context/roadmap.md` |
 | Architecture decisions | `context/decisions.md` |
 | Change history | `context/changelog.md` |
+| Reusable prompts | `context/prompts.md` |
 
 ## Matthew's Working Style
 

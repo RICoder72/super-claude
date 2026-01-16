@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # Path-based router
+  router:
+    image: nginx:alpine
+    container_name: super-claude-router
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./router/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /volume1/docker/super-claude/outputs:/outputs:ro
+    depends_on:
+      - super-claude
+      - super-claude-ops
+    restart: unless-stopped
+    networks:
+      - super-claude-net
+
+  # Main MCP
+  super-claude:
+    build:
+      context: .
+      dockerfile: mcps/super-claude/Dockerfile
+    container_name: super-claude
+    env_file:
+      - config/.env
+    volumes:
+      - /volume1/docker/super-claude:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - super-claude-net
+
+  # Ops MCP
+  super-claude-ops:
+    build:
+      context: .
+      dockerfile: mcps/ops/Dockerfile
+    container_name: super-claude-ops
+    env_file:
+      - config/.env
+    volumes:
+      - /volume1/docker/super-claude:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - super-claude-net
+
+networks:
+  super-claude-net:
+    driver: bridge

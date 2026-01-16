@@ -111,6 +111,24 @@ Quick test sequence:
 
 If all four work, the system is healthy.
 
+## 1Password Integration
+
+Claude can both **read** and **create** secrets in 1Password:
+
+**Read a secret:**
+```
+auth_get("GitHub PAT - Claude Code")
+auth_get("API Key Name", "fieldname", "Vault Name")
+```
+
+**Create a secret:**
+```
+auth_set("New API Key", '{"credential": "the-secret-value"}')
+auth_set("Full Example", '{"api_key": "xyz", "user_id": "123"}', vault="Key Vault", category="api_credential", notes="Optional notes")
+```
+
+Categories: `login`, `password`, `api_credential`, `secure_note`
+
 ## Backup
 
 The entire super-claude folder can be backed up:
