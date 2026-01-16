@@ -41,7 +41,7 @@
       "Domain triggering UX - SOLVED: keyword detection in session_start + improved tool descriptions"
     ]
   },
-  "lastUpdated": "2026-01-12",
+  "lastUpdated": "2026-01-16",
   "recentChanges": [
     "2026-01-11: Fixed FunctionTool bug (tools calling other tools)",
     "2026-01-11: Claude Code setup with JWT token (expires 2026-07-10)",
@@ -60,5 +60,17 @@
     "Cloudflare: Partially configured for ricoder.me - needs DNS records for backup path",
     "Self-recovery: Watchdog or webhook to restart router without SSH",
     "Reference materials convention: Document pattern for storing artifacts (IC10 programs, research data, etc.) in context/ folder - add 'Reference Materials' section to domain.md template listing available files without auto-loading them"
-  ]
+  ],
+  "planned_features": {
+    "safety_mode": {
+      "description": "On-demand safety mode that blocks write/delete operations",
+      "details": [
+        "Add permission metadata to tools (read/write/dangerous)",
+        "Toggle via voice command with passphrase verification",
+        "When active, block write/delete/dangerous ops",
+        "Passphrase stored securely, verified in transcript"
+      ],
+      "status": "planned"
+    }
+  }
 }

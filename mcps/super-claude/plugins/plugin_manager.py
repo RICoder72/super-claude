@@ -109,3 +109,7 @@ class PluginManager:
     def get_tools(self) -> dict:
         """Get all available tools from loaded plugins."""
         return self.loader.get_tools()
+    
+    def get_plugin_info(self) -> dict:
+        """Get information about all loaded plugins (delegates to loader)."""
+        return self.loader.get_plugin_info()

@@ -52,7 +52,7 @@ class PluginLoader:
             # Skip private/special files
             if file.name.startswith("_"):
                 continue
-            if file.name == "plugin_base.py":
+            if file.name in {"plugin_base.py", "plugin_loader.py", "plugin_manager.py"}:
                 continue
             plugins.append(file.stem)
         return plugins
