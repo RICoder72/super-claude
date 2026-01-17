@@ -56,7 +56,7 @@
 
 ## Plugin System
 
-Plugins extend Super Claude with additional capabilities. Located in `/data/plugins/`.
+Plugins extend Super Claude with additional capabilities. Located in `/data/mcps/super-claude/plugins/`.
 
 ### op_auth (1Password)
 | Tool | Description |
@@ -75,12 +75,46 @@ Plugins extend Super Claude with additional capabilities. Located in `/data/plug
 | `storage_download` | Download file from cloud |
 | `storage_upload` | Upload file to cloud |
 
-**Supported providers**: Google Drive (active), Supernote (planned), OneDrive (planned), Dropbox (planned)
+**Supported providers**: Google Drive (active), OneDrive (planned), Dropbox (planned)
 
 **Account system**: Named accounts (e.g., "personal", "work") abstract away provider details. Plugins reference accounts by name.
 
-### supernote (Skeleton)
-Planned integration with Supernote cloud for note sync. Tools defined but not yet implemented.
+### supernote (Domain Sync)
+
+Syncs files between Super Claude domains and Supernote devices via cloud storage. Does NOT talk to Supernote directly — uses the storage abstraction layer to sync with whatever cloud provider the Supernote device syncs to.
+
+| Tool | Description |
+|------|-------------|
+| `supernote_setup` | Configure sync for a domain (account, subfolder, options) |
+| `supernote_status` | Show sync config and local file counts |
+| `supernote_list_remote` | List files in remote Note/ or Document/ folder |
+| `supernote_pull` | Download .note files from cloud to domain |
+| `supernote_push` | Upload documents from domain to cloud |
+
+**Architecture**:
+```
+Supernote Device → (auto-sync) → Cloud Storage ← (storage_* tools) ← Super Claude
+```
+
+**Per-domain config** (`domains/{name}/plugins/supernote/config.json`):
+```json
+{
+  "account": "personal",
+  "subfolder": "burrillville",
+  "sync_notes": true,
+  "sync_documents": true,
+  "convert_to": ["pdf", "png"]
+}
+```
+
+**Local folder structure**:
+```
+domains/{name}/plugins/supernote/
+├── config.json    # Sync configuration
+├── notes/         # .note files pulled from device
+├── documents/     # Files to push to device
+└── converted/     # PDF/PNG conversions (local only)
+```
 
 ---
 
@@ -92,7 +126,8 @@ Domains are isolated knowledge contexts. Each contains:
 domains/{name}/
 ├── {name}.md      # Always loaded - personality, goals, interaction style
 ├── state.json     # Session state - lightweight, changes often
-└── context/       # Reference files - loaded on demand
+├── context/       # Reference files - loaded on demand
+└── plugins/       # Per-domain plugin data (e.g., supernote sync)
 ```
 
 **Trigger keywords**: Domains define keywords in `config/domain_triggers.json`. When `session_start` sees matching keywords, it auto-loads the domain.

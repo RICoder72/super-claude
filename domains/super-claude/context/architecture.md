@@ -37,7 +37,6 @@
         │  /data (mounted volume)     │
         │  ├── mcps/                  │
         │  ├── domains/               │
-        │  ├── plugins/               │
         │  ├── config/                │
         │  └── outputs/               │
         └─────────────────────────────┘
@@ -61,10 +60,26 @@ MCP Tools (abstract)     →  storage_list_files("personal", "/path")
         ↓
 Storage Manager          →  routes by account name
         ↓
-Providers                →  gdrive, supernote, onedrive, dropbox
+Providers                →  gdrive, onedrive, dropbox
 ```
 
 Accounts stored in `/data/config/storage_accounts.json`. Credentials referenced via 1Password.
+
+## Supernote Sync Architecture
+
+Supernote sync uses the storage abstraction layer rather than talking to Supernote directly (their cloud SDKs are broken). The plugin syncs via whatever cloud storage the Supernote device syncs to.
+
+```
+Supernote Device                     Super Claude Domain
+      │                                   │
+      │ (device auto-sync)                │ plugins/supernote/
+      ▼                                   │   ├── config.json
+┌─────────────────────────────────────────│   ├── notes/
+│       Cloud Storage (e.g., GDrive)      │   ├── documents/
+│  /Note/{subfolder}/     ←──────pull─────│   └── converted/
+│  /Document/{subfolder}/ ←──────push─────│
+└─────────────────────────────────────────┘
+```
 
 ---
 
@@ -157,7 +172,7 @@ domains/{name}/
 
 **Context**: How to extend Super Claude with optional capabilities?
 
-**Decision**: Plugin directory (`/data/plugins/`) with auto-discovery.
+**Decision**: Plugin directory (`/data/mcps/super-claude/plugins/`) with auto-discovery.
 
 **Rationale**:
 - Keeps core MCP lean
@@ -183,6 +198,41 @@ domains/{name}/
 - All tracked in git
 - Updated at session wrap-up
 - state.json stays minimal (runtime state only)
+
+---
+
+### ADR-008: Per-Domain Plugin Directories
+**Date**: 2026-01-17 | **Status**: Decided
+
+**Context**: Where should plugins store per-domain configuration and data?
+
+**Decision**: Each domain can have a `plugins/` subdirectory with plugin-specific folders:
+```
+domains/{name}/
+├── {name}.md
+├── state.json
+├── context/
+└── plugins/
+    └── {plugin-name}/
+        ├── config.json    # Plugin configuration for this domain
+        └── ...            # Plugin-specific files
+```
+
+**Example** (supernote):
+```
+domains/burrillville/plugins/supernote/
+├── config.json    # account, subfolder, sync settings
+├── notes/         # .note files pulled from device
+├── documents/     # files to push to device
+└── converted/     # local conversions (not synced)
+```
+
+**Rationale**:
+- Clean separation between plugin code and plugin data
+- Each domain can have different plugin configurations
+- Plugin data lives with the domain it belongs to
+- Easy to see what plugins a domain uses
+- Plugins don't pollute the domain's main directory structure
 
 ---
 

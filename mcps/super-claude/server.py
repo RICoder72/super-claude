@@ -71,10 +71,9 @@ if str(PROVIDERS_DIR) not in sys.path:
 try:
     from storage_manager import StorageManager
     from providers.gdrive import GoogleDriveProvider
-    from supernote_provider import SupernoteProvider
+    # supernote handled via plugin, not provider
     storage_manager = StorageManager(STORAGE_CONFIG)
     storage_manager.register_provider_type("gdrive", GoogleDriveProvider)
-    storage_manager.register_provider_type("supernote", SupernoteProvider)
     STORAGE_AVAILABLE = True
     logger.info("Storage system initialized")
 except ImportError as e:
@@ -808,7 +807,7 @@ if STORAGE_AVAILABLE:
         
         Args:
             name: Account label (e.g., "work", "personal")
-            provider: Provider type ("gdrive", "supernote", "onedrive", "dropbox")
+            provider: Provider type ("gdrive", "onedrive", "dropbox")
             credentials_ref: 1Password reference for credentials
             config: JSON string with provider config
         """
@@ -889,6 +888,69 @@ def rebuild_ops() -> str:
     return "\n".join(steps)
 
 # =============================================================================
+# =============================================================================
+# SUPERNOTE PLUGIN TOOLS
+# =============================================================================
+# Expose supernote plugin tools via MCP
+# Plugin handles sync between domains and cloud storage (where Supernote syncs)
+
+if PLUGINS_AVAILABLE and 'supernote' in plugin_loader.loaded_plugins:
+    _supernote = plugin_loader.loaded_plugins['supernote']
+    
+    @mcp.tool()
+    async def supernote_setup(
+        domain: str,
+        account: str,
+        subfolder: str,
+        sync_notes: bool = True,
+        sync_documents: bool = True,
+        convert_to: str = "pdf,png"
+    ) -> str:
+        """
+        Configure Supernote sync for a domain.
+        
+        Args:
+            domain: Domain name to configure
+            account: Storage account name (from storage_list_accounts)
+            subfolder: Subfolder name on Supernote (e.g., "burrillville")
+            sync_notes: Whether to sync .note files from device (default: True)
+            sync_documents: Whether to sync documents to device (default: True)
+            convert_to: Formats to convert .note files to (comma-separated: pdf,png)
+        """
+        return await _supernote.supernote_setup(domain, account, subfolder, sync_notes, sync_documents, convert_to)
+    
+    @mcp.tool()
+    async def supernote_status(domain: str) -> str:
+        """Show Supernote sync status for a domain."""
+        return await _supernote.supernote_status(domain)
+    
+    @mcp.tool()
+    async def supernote_pull(domain: str, convert: bool = True) -> str:
+        """
+        Pull .note files from Supernote (via cloud storage).
+        
+        Args:
+            domain: Domain name
+            convert: Whether to convert .note files to PDF/PNG (default: True)
+        """
+        return await _supernote.supernote_pull(domain, convert)
+    
+    @mcp.tool()
+    async def supernote_push(domain: str) -> str:
+        """Push documents to Supernote (via cloud storage)."""
+        return await _supernote.supernote_push(domain)
+    
+    @mcp.tool()
+    async def supernote_list_remote(domain: str, path_type: str = "notes") -> str:
+        """
+        List files in the remote Supernote folder.
+        
+        Args:
+            domain: Domain name
+            path_type: "notes" or "documents"
+        """
+        return await _supernote.supernote_list_remote(domain, path_type)
+
 # MAIN
 # =============================================================================
 if __name__ == "__main__":

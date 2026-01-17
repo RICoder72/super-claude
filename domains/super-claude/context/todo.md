@@ -2,19 +2,23 @@
 
 ## In Progress
 
-**Cloud Storage Integration**
-- [x] Abstract storage layer with provider interface
-- [x] Google Drive provider implementation
-- [x] Account management tools (add/remove/list)
-- [x] File operations (list/download/upload)
-- [x] "personal" Google Drive account configured
-- [ ] Supernote provider implementation (awaiting OAuth credentials)
-- [ ] OneDrive provider (future)
-- [ ] Dropbox provider (future)
+**Supernote Plugin**
+- [x] Plugin architecture using storage abstraction (not direct Supernote API)
+- [x] Per-domain config in `plugins/supernote/config.json`
+- [x] Setup tool with account + subfolder configuration
+- [x] Pull/push/list tools implemented
+- [x] Local folder structure (notes/, documents/, converted/)
+- [ ] .note → PDF/PNG conversion (needs parser library research)
+- [ ] Test with actual Supernote folder structure on Google Drive
 
 ---
 
 ## Next Up
+
+### Supernote Polish
+- [ ] **Note conversion**: Research supernote-tool or similar for .note → PDF/PNG
+- [ ] **Sync status tracking**: Track which files have been synced, detect changes
+- [ ] **Selective sync**: Allow syncing specific files, not just all
 
 ### Domain System Improvements
 - [ ] **Cross-domain search**: `context_search` tool to find relevant info across all domains
@@ -29,6 +33,10 @@
 ---
 
 ## Backlog
+
+### Cloud Storage Providers
+- [ ] OneDrive provider
+- [ ] Dropbox provider
 
 ### Reliability & Safety
 - [ ] **Guardrails**: Prevent shell_exec from stopping/removing critical containers

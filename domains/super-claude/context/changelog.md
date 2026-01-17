@@ -2,7 +2,50 @@
 
 ## 2026-01-17
 
-### Session: Documentation Restructure
+### Session 2: Supernote Plugin Implementation
+
+**What**: Built Supernote sync plugin that uses the storage abstraction layer to sync files between domains and Supernote devices.
+
+**Key insight**: Supernote's cloud SDKs are broken due to security changes. Instead of talking to Supernote directly, we sync via whatever cloud storage the Supernote device syncs to (e.g., Google Drive). The plugin is thin — it just orchestrates sync using Super Claude's existing storage tools.
+
+**Architecture**:
+```
+Supernote Device → (auto-sync) → Cloud Storage ← (storage_* tools) ← Super Claude
+```
+
+**Changes**:
+- Rewrote `plugins/supernote.py` (v0.2.0) to use storage abstraction instead of sncloud SDK
+- Added 5 MCP tools:
+  - `supernote_setup(domain, account, subfolder)` - configure sync for a domain
+  - `supernote_status(domain)` - show config and file counts
+  - `supernote_list_remote(domain, path_type)` - list files on cloud
+  - `supernote_pull(domain)` - download .note files
+  - `supernote_push(domain)` - upload documents
+- Removed `providers/supernote_provider.py` (no longer needed)
+- Updated `providers/__init__.py` to remove supernote provider
+- Updated `server.py`:
+  - Removed supernote provider registration
+  - Added supernote tool wrappers to expose plugin tools via MCP
+- Established per-domain plugin directory convention:
+  ```
+  domains/{name}/plugins/supernote/
+  ├── config.json    # account, subfolder, sync settings
+  ├── notes/         # .note files pulled from device
+  ├── documents/     # files to push to device
+  └── converted/     # PDF/PNG conversions (local only)
+  ```
+
+**Setup flow**: When configuring supernote for a domain, Claude asks for:
+1. Storage account name (or offers to create one)
+2. Subfolder name used on device
+
+**Still TODO**:
+- .note → PDF/PNG conversion (needs parser library)
+- Test with actual Supernote folder structure
+
+---
+
+### Session 1: Documentation Restructure
 
 **What**: Consolidated scattered development records into four canonical files with clear purposes.
 
@@ -48,7 +91,7 @@ MCP Tools (abstract)     →  storage_list_files("personal", "/path")
         ↓
 Storage Manager          →  routes by account name
         ↓
-Providers                →  gdrive, supernote, (future: dropbox, onedrive)
+Providers                →  gdrive, (future: dropbox, onedrive)
 ```
 
 **Changes**:
