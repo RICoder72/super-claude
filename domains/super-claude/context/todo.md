@@ -8,17 +8,32 @@
 - [x] Setup tool with account + subfolder configuration
 - [x] Pull/push/list tools implemented
 - [x] Local folder structure (notes/, documents/, converted/)
-- [ ] .note → PDF/PNG conversion (needs parser library research)
-- [ ] Test with actual Supernote folder structure on Google Drive
+- [x] .note → PNG conversion via supernotelib
+- [x] base_path config for non-root Supernote sync folders
+- [ ] Test push direction (documents to Supernote)
 
 ---
 
 ## Next Up
 
+### Plugin System Improvements
+- [ ] **Hot loading**: New plugins should be detected and loaded without restart
+- [ ] **Hot reloading**: Changed plugin code should take effect without restart
+  - Current issue: Python module caching requires server restart
+  - MCP tool schema also cached in client conversation
+  - Need to invalidate `sys.modules` cache on reload
+  - Consider file watcher for auto-reload during development
+
+### Publishing / Web Output
+- [ ] **Auth for published files**: Currently returns 403 forbidden
+  - Need to either: add auth to nginx for /super-claude-output, or make outputs truly public, or provide signed URLs
+  - Consider: should publish tool return a way to view in-chat instead of/in addition to URL?
+- [ ] **In-chat file delivery**: Way to get published files into Claude chat directly (base64? copy to claude.ai uploads?)
+
 ### Supernote Polish
-- [ ] **Note conversion**: Research supernote-tool or similar for .note → PDF/PNG
 - [ ] **Sync status tracking**: Track which files have been synced, detect changes
 - [ ] **Selective sync**: Allow syncing specific files, not just all
+- [ ] **Incremental pull**: Only download new/changed files
 
 ### Domain System Improvements
 - [ ] **Cross-domain search**: `context_search` tool to find relevant info across all domains

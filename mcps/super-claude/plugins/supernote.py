@@ -8,11 +8,14 @@ Architecture:
     Supernote Device → (auto-sync) → Cloud Storage ← (storage_* tools) ← Super Claude
 
 Per-domain config stored in: domains/{name}/plugins/supernote/config.json
+
+Requires: supernotelib (pip install supernotelib)
 """
 
 import sys
 import json
 import asyncio
+import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -42,10 +45,10 @@ class SupernotePlugin(SuperClaudePlugin):
         """Initialize the plugin."""
         self.metadata = {
             "name": "supernote",
-            "version": "0.2.0",
+            "version": "0.4.0",
             "description": "Sync domains with Supernote via cloud storage",
             "author": "Matthew",
-            "requires": []  # No external deps - uses core storage
+            "requires": ["supernotelib"]
         }
         
         self.tools = {
@@ -108,6 +111,78 @@ class SupernotePlugin(SuperClaudePlugin):
         (plugin_path / "documents").mkdir(parents=True, exist_ok=True)
         (plugin_path / "converted").mkdir(parents=True, exist_ok=True)
     
+    def _get_remote_paths(self, config: Dict[str, Any]) -> tuple[str, str]:
+        """Get the remote note and document paths from config."""
+        base_path = config.get("base_path", "").rstrip("/")
+        subfolder = config["subfolder"]
+        note_path = f"{base_path}/Note/{subfolder}"
+        doc_path = f"{base_path}/Document/{subfolder}"
+        return note_path, doc_path
+    
+    def _convert_note(self, note_path: Path, output_dir: Path, formats: List[str]) -> Dict[str, Any]:
+        """
+        Convert a .note file to specified formats using supernote-tool.
+        
+        Args:
+            note_path: Path to the .note file
+            output_dir: Directory to write converted files
+            formats: List of formats to convert to (png, pdf, svg, txt)
+        
+        Returns:
+            Dict with 'success', 'converted', 'errors' keys
+        """
+        result = {"success": True, "converted": [], "errors": []}
+        base_name = note_path.stem
+        
+        for fmt in formats:
+            if fmt not in ["png", "pdf", "svg", "txt"]:
+                result["errors"].append(f"Unknown format: {fmt}")
+                continue
+            
+            output_path = output_dir / f"{base_name}.{fmt}"
+            
+            # Build command
+            # -a = all pages, -t = type
+            cmd = ["supernote-tool", "convert", "-a", "-t", fmt]
+            
+            # For PDF, use vector type for better quality
+            if fmt == "pdf":
+                cmd.extend(["--pdf-type", "vector"])
+            
+            cmd.extend([str(note_path), str(output_path)])
+            
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=120  # 2 min timeout for large files
+                )
+                
+                if proc.returncode == 0:
+                    # Count output files (PNG creates multiple: name_0.png, name_1.png, etc.)
+                    if fmt == "png":
+                        pngs = list(output_dir.glob(f"{base_name}_*.png"))
+                        result["converted"].extend([p.name for p in pngs])
+                    else:
+                        if output_path.exists():
+                            result["converted"].append(output_path.name)
+                        else:
+                            result["errors"].append(f"Output not created: {output_path.name}")
+                else:
+                    error_msg = proc.stderr.strip() or f"Exit code {proc.returncode}"
+                    result["errors"].append(f"{fmt}: {error_msg}")
+                    result["success"] = False
+                    
+            except subprocess.TimeoutExpired:
+                result["errors"].append(f"{fmt}: Timeout (>120s)")
+                result["success"] = False
+            except Exception as e:
+                result["errors"].append(f"{fmt}: {str(e)}")
+                result["success"] = False
+        
+        return result
+    
     async def supernote_setup(
         self,
         domain: str,
@@ -115,7 +190,8 @@ class SupernotePlugin(SuperClaudePlugin):
         subfolder: str,
         sync_notes: bool = True,
         sync_documents: bool = True,
-        convert_to: str = "pdf,png"
+        convert_to: str = "pdf,png",
+        base_path: str = ""
     ) -> str:
         """
         Configure Supernote sync for a domain.
@@ -127,6 +203,7 @@ class SupernotePlugin(SuperClaudePlugin):
             sync_notes: Whether to sync .note files from device (default: True)
             sync_documents: Whether to sync documents to device (default: True)
             convert_to: Formats to convert .note files to (comma-separated: pdf,png)
+            base_path: Root folder where Supernote syncs (e.g., "/Supernote" or "" for root)
         
         Returns:
             Success message with config details
@@ -148,10 +225,16 @@ class SupernotePlugin(SuperClaudePlugin):
         # Parse convert formats
         convert_formats = [f.strip() for f in convert_to.split(",") if f.strip()]
         
+        # Normalize base_path (remove trailing slash, ensure leading slash if not empty)
+        base_path = base_path.strip().rstrip("/")
+        if base_path and not base_path.startswith("/"):
+            base_path = "/" + base_path
+        
         # Create config
         config = {
             "account": account,
             "subfolder": subfolder,
+            "base_path": base_path,
             "sync_notes": sync_notes,
             "sync_documents": sync_documents,
             "convert_to": convert_formats,
@@ -165,21 +248,21 @@ class SupernotePlugin(SuperClaudePlugin):
             return "❌ Failed to save configuration"
         
         # Build remote paths for reference
-        note_path = f"/Note/{subfolder}/"
-        doc_path = f"/Document/{subfolder}/"
+        note_path, doc_path = self._get_remote_paths(config)
         
         return f"""✅ Supernote configured for domain: {domain}
 
 **Configuration:**
 - Storage account: {account}
+- Base path: {base_path or '/ (root)'}
 - Subfolder: {subfolder}
 - Sync notes: {sync_notes}
 - Sync documents: {sync_documents}
 - Convert .note to: {', '.join(convert_formats) or 'none'}
 
 **Remote paths (on cloud/device):**
-- Notes: {note_path}
-- Documents: {doc_path}
+- Notes: {note_path}/
+- Documents: {doc_path}/
 
 **Local paths:**
 - Notes: domains/{domain}/plugins/supernote/notes/
@@ -211,15 +294,22 @@ Use `supernote_push("{domain}")` to upload documents to device."""
         converted_count = len(list((plugin_path / "converted").glob("*"))) if (plugin_path / "converted").exists() else 0
         
         last_sync = config.get("last_sync", "Never")
+        base_path = config.get("base_path", "")
+        note_path, doc_path = self._get_remote_paths(config)
         
         return f"""📱 Supernote Status: {domain}
 {'─' * 40}
 **Configuration:**
 - Account: {config['account']}
+- Base path: {base_path or '/ (root)'}
 - Subfolder: {config['subfolder']}
 - Sync notes: {config.get('sync_notes', True)}
 - Sync documents: {config.get('sync_documents', True)}
 - Convert to: {', '.join(config.get('convert_to', [])) or 'none'}
+
+**Remote paths:**
+- Notes: {note_path}/
+- Documents: {doc_path}/
 
 **Local files:**
 - Notes (.note): {notes_count}
@@ -248,12 +338,12 @@ Use `supernote_push("{domain}")` to upload documents to device."""
             return "❌ Storage manager not available"
         
         account = config["account"]
-        subfolder = config["subfolder"]
+        note_path, doc_path = self._get_remote_paths(config)
         
         if path_type == "notes":
-            remote_path = f"/Note/{subfolder}"
+            remote_path = note_path
         elif path_type == "documents":
-            remote_path = f"/Document/{subfolder}"
+            remote_path = doc_path
         else:
             return f"❌ Invalid path_type: {path_type}. Use 'notes' or 'documents'."
         
@@ -280,7 +370,7 @@ Use `supernote_push("{domain}")` to upload documents to device."""
         
         Args:
             domain: Domain name
-            convert: Whether to convert .note files to PDF/PNG (default: True)
+            convert: Whether to convert .note files to configured formats (default: True)
         
         Returns:
             Summary of downloaded and converted files
@@ -297,8 +387,7 @@ Use `supernote_push("{domain}")` to upload documents to device."""
             return "❌ Storage manager not available"
         
         account = config["account"]
-        subfolder = config["subfolder"]
-        remote_path = f"/Note/{subfolder}"
+        note_path, _ = self._get_remote_paths(config)
         local_notes_path = self._get_plugin_path(domain) / "notes"
         local_converted_path = self._get_plugin_path(domain) / "converted"
         
@@ -308,45 +397,73 @@ Use `supernote_push("{domain}")` to upload documents to device."""
         
         try:
             # List remote files
-            files = await storage_manager.list_files(account, remote_path)
+            files = await storage_manager.list_files(account, note_path)
             note_files = [f for f in files if f.name.endswith(".note")]
             
             if not note_files:
-                return f"📂 No .note files found in {remote_path}"
+                return f"📂 No .note files found in {note_path}"
             
             downloaded = []
-            failed = []
+            download_failed = []
             
             for f in note_files:
                 local_file = local_notes_path / f.name
                 result = await storage_manager.download(
                     account,
-                    f"{remote_path}/{f.name}",
+                    f"{note_path}/{f.name}",
                     local_file
                 )
                 
                 if "✅" in result:
                     downloaded.append(f.name)
                 else:
-                    failed.append(f.name)
+                    download_failed.append(f.name)
             
             # Update last sync time
             config["last_sync"] = datetime.now().isoformat()
             self._save_config(domain, config)
             
-            # TODO: Convert .note files to PDF/PNG
-            # This requires a .note parser - could use supernote-tool or similar
-            converted_msg = ""
-            if convert and config.get("convert_to"):
-                converted_msg = f"\n\n⚠️ Conversion to {', '.join(config['convert_to'])} not yet implemented"
+            # Convert downloaded files if requested
+            converted_files = []
+            convert_errors = []
             
-            return f"""✅ Pull complete for {domain}
-
-**Downloaded:** {len(downloaded)} files
-{chr(10).join(f'  - {n}' for n in downloaded) if downloaded else '  (none)'}
-
-**Failed:** {len(failed)} files
-{chr(10).join(f'  - {n}' for n in failed) if failed else '  (none)'}{converted_msg}"""
+            if convert and config.get("convert_to") and downloaded:
+                formats = config["convert_to"]
+                for note_name in downloaded:
+                    note_file = local_notes_path / note_name
+                    conv_result = self._convert_note(note_file, local_converted_path, formats)
+                    converted_files.extend(conv_result["converted"])
+                    convert_errors.extend(conv_result["errors"])
+            
+            # Build response
+            lines = [f"✅ Pull complete for {domain}", ""]
+            
+            lines.append(f"**Downloaded:** {len(downloaded)} files")
+            if downloaded:
+                for n in downloaded:
+                    lines.append(f"  - {n}")
+            else:
+                lines.append("  (none)")
+            
+            if download_failed:
+                lines.append(f"\n**Download failed:** {len(download_failed)} files")
+                for n in download_failed:
+                    lines.append(f"  - {n}")
+            
+            if convert and config.get("convert_to"):
+                lines.append(f"\n**Converted:** {len(converted_files)} files")
+                if converted_files:
+                    for n in converted_files:
+                        lines.append(f"  - {n}")
+                else:
+                    lines.append("  (none)")
+                
+                if convert_errors:
+                    lines.append(f"\n**Conversion errors:**")
+                    for e in convert_errors:
+                        lines.append(f"  - {e}")
+            
+            return "\n".join(lines)
         
         except Exception as e:
             return f"❌ Pull failed: {e}"
@@ -373,8 +490,7 @@ Use `supernote_push("{domain}")` to upload documents to device."""
             return "❌ Storage manager not available"
         
         account = config["account"]
-        subfolder = config["subfolder"]
-        remote_path = f"/Document/{subfolder}"
+        _, doc_path = self._get_remote_paths(config)
         local_docs_path = self._get_plugin_path(domain) / "documents"
         
         if not local_docs_path.exists():
@@ -394,7 +510,7 @@ Use `supernote_push("{domain}")` to upload documents to device."""
                 result = await storage_manager.upload(
                     account,
                     local_file,
-                    f"{remote_path}/{local_file.name}"
+                    f"{doc_path}/{local_file.name}"
                 )
                 
                 if "✅" in result:
@@ -422,5 +538,5 @@ Use `supernote_push("{domain}")` to upload documents to device."""
         logger.info("Supernote plugin loaded")
     
     def on_unload(self) -> None:
-        """Called when plugin unloads."""
+        """Called when plugin unloaded."""
         logger.info("Supernote plugin unloaded")

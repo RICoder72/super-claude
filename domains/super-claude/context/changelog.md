@@ -2,6 +2,48 @@
 
 ## 2026-01-17
 
+### Session 3: Supernote Conversion & Path Fixes
+
+**What**: Completed Supernote plugin with .note → PNG conversion and fixed path handling for non-root sync folders.
+
+**Bug fixed**: Plugin assumed Supernote synced to cloud storage root, but Matthew's syncs to `/Supernote/Note/...` and `/Supernote/Document/...`. Added `base_path` config option.
+
+**Changes**:
+- **v0.3.0**: Added `base_path` config for non-root Supernote sync folders
+  - Setup now accepts optional `base_path` parameter (e.g., "/Supernote")
+  - All remote path calculations now include base_path prefix
+  - Status output shows full remote paths for clarity
+- **v0.4.0**: Integrated supernote-tool for .note → PNG/PDF conversion
+  - `pip install supernotelib` provides `supernote-tool` CLI
+  - `_convert_note()` method wraps CLI for programmatic conversion
+  - `supernote_pull()` now auto-converts downloaded notes
+  - Supports png, pdf, svg, txt output formats
+  - Multi-page notes create numbered files (e.g., `note_0.png`, `note_1.png`)
+
+**Testing**:
+- Successfully pulled 4 notes from Google Drive `/Supernote/Note/Burrillville Technology/`
+- Converted to 11 PNG pages total
+- Verified image quality - handwriting renders cleanly and is readable by Claude
+
+**Plugin hot reload issue discovered**:
+- `plugin_reload()` updates Python code but module caching prevents full reload
+- MCP tool schema also cached in client conversation
+- Workaround: Server restart required for plugin code changes
+- Added to TODO for future fix
+
+**Infrastructure note**: 
+- Published files at zanni.synology.me/super-claude-output require auth (403)
+- Workaround: base64 encode on Super Claude, decode in Claude.ai container, present_files
+- Added to TODO: proper publishing auth or in-chat file delivery
+
+**Result**: Full Supernote → Claude pipeline working:
+```
+Supernote device → Google Drive sync → supernote_pull → .note files
+→ supernote-tool convert → PNG images → Claude can read handwriting
+```
+
+---
+
 ### Session 2: Supernote Plugin Implementation
 
 **What**: Built Supernote sync plugin that uses the storage abstraction layer to sync files between domains and Supernote devices.
