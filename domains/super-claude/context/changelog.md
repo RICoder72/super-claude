@@ -2,6 +2,62 @@
 
 ## 2026-01-17
 
+### Session 6: Code Audit & Refactoring
+
+**What**: Performed comprehensive code audit and addressed key findings.
+
+**Audit Report**: Created `context/audit-2026-01-17.md` covering:
+- Inefficiencies (monolithic server.py, sync path resolution)
+- Code duplication (shell helpers, path constants, JSON handling)
+- Security issues (Docker socket access, in-memory auth codes, rate limiting)
+- Architectural concerns (plugin registration, storage manager coupling)
+
+**Refactoring completed**:
+
+1. **Created shared modules**:
+   - `shared/config.py` — centralized constants (SUPER_CLAUDE_ROOT, DOMAINS_DIR, etc.)
+   - `shared/shell.py` — unified shell execution with safety guards
+
+2. **Added command blocklist to shell execution**:
+   - Blocks dangerous patterns: `rm -rf /`, `mkfs`, `dd of=/`, fork bombs
+   - Protects critical containers from accidental stop/remove
+   - Logged warnings when commands are blocked
+
+3. **Updated server.py**:
+   - Removed duplicate `SUPER_CLAUDE_ROOT` definition
+   - Now imports from shared modules (with fallback)
+   - Shell execution routed through shared module with safety checks
+
+4. **Updated ops/server.py**:
+   - Now uses shared modules for constants and shell execution
+   - Passes `check_blocked=False` for ops commands (trusted context)
+
+5. **Updated Dockerfiles**:
+   - Both now copy `shared/` directory
+   - Both configure git safe.directory for /data
+   - Enables git commands from within containers
+
+**Git improvements**:
+- Can now run git commands from super-claude container
+- Added safe.directory config to both Dockerfiles
+- No more "dubious ownership" errors
+
+**Files changed**:
+- `shared/config.py` (new)
+- `shared/shell.py` (new)
+- `mcps/super-claude/server.py`
+- `mcps/super-claude/Dockerfile`
+- `mcps/ops/server.py`
+- `mcps/ops/Dockerfile`
+
+**Next steps from audit**:
+- Split server.py into modules (tools/, helpers/)
+- Fix supernote plugin → storage_manager coupling
+- Add rate limiting to auth service
+- Implement cookie-based auth for published files
+
+---
+
 ### Session 5: Published File Auth Fix
 
 **What**: Fixed 403 errors when accessing published files via browser.

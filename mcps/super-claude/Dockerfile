@@ -32,6 +32,9 @@ COPY mcps/super-claude/ /app/
 # Install dependencies
 RUN uv pip install --system -e .
 
+# Configure git to trust the /data directory (for shell_exec git commands)
+RUN git config --global --add safe.directory /data
+
 EXPOSE 8000
 
 CMD ["python", "server.py"]

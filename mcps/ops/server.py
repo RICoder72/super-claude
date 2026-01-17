@@ -12,21 +12,35 @@ from fastmcp import FastMCP
 import subprocess
 from pathlib import Path
 from datetime import datetime
+import sys
+
+# =============================================================================
+# SHARED MODULE IMPORTS
+# =============================================================================
+sys.path.insert(0, "/app/shared")
+sys.path.insert(0, "/data/shared")
+
+try:
+    from config import SUPER_CLAUDE_ROOT, BACKUPS_DIR, DOCKER_NETWORK
+    from shell import run_shell
+    SHARED_MODULES_AVAILABLE = True
+except ImportError:
+    SHARED_MODULES_AVAILABLE = False
+    SUPER_CLAUDE_ROOT = Path("/data")
+    BACKUPS_DIR = SUPER_CLAUDE_ROOT / "backups"
+    DOCKER_NETWORK = "super-claude_super-claude-net"
 
 mcp = FastMCP("Super Claude Ops")
-
-# =============================================================================
-# CONFIG
-# =============================================================================
-SUPER_CLAUDE_ROOT = Path("/data")  # Same mount as super-claude
-BACKUP_DIR = SUPER_CLAUDE_ROOT / "backups"
-DOCKER_NETWORK = "super-claude_super-claude-net"
 
 # =============================================================================
 # HELPERS
 # =============================================================================
 def _run(command: str, timeout: int = 120) -> tuple[bool, str]:
     """Run shell command, return (success, output)"""
+    if SHARED_MODULES_AVAILABLE:
+        return run_shell(command, timeout, cwd=SUPER_CLAUDE_ROOT, check_blocked=False)
+    
+    # Fallback implementation
     try:
         result = subprocess.run(
             command,
@@ -140,12 +154,12 @@ def backup(name: str = "") -> str:
     Args:
         name: Optional name suffix for the backup
     """
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix = f"_{name}" if name else ""
     backup_name = f"backup_{timestamp}{suffix}.tar.gz"
-    backup_path = BACKUP_DIR / backup_name
+    backup_path = BACKUPS_DIR / backup_name
     
     # Backup domains and config (not mcps/shared - those are in git)
     cmd = f"tar -czvf {backup_path} domains/ config/.env.example"
@@ -161,10 +175,10 @@ def backup(name: str = "") -> str:
 @mcp.tool()
 def list_backups() -> str:
     """List available backups."""
-    if not BACKUP_DIR.exists():
+    if not BACKUPS_DIR.exists():
         return "📁 No backups directory yet"
     
-    backups = sorted(BACKUP_DIR.glob("backup_*.tar.gz"), reverse=True)
+    backups = sorted(BACKUPS_DIR.glob("backup_*.tar.gz"), reverse=True)
     if not backups:
         return "📁 No backups found"
     
@@ -185,7 +199,7 @@ def restore(backup_name: str) -> str:
     
     WARNING: This will overwrite current domains!
     """
-    backup_path = BACKUP_DIR / backup_name
+    backup_path = BACKUPS_DIR / backup_name
     if not backup_path.exists():
         return f"❌ Backup not found: {backup_name}"
     

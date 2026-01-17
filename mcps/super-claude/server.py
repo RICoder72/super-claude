@@ -18,13 +18,43 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Add plugins to path for imports
-SUPER_CLAUDE_ROOT = Path("/data")
-PLUGINS_DIR = SUPER_CLAUDE_ROOT / "mcps" / "super-claude" / "plugins"
+# =============================================================================
+# SHARED MODULE IMPORTS
+# =============================================================================
+# Add shared directory to path
+sys.path.insert(0, "/app/shared")
+sys.path.insert(0, "/data/shared")
+
+try:
+    from config import (
+        SUPER_CLAUDE_ROOT, DOMAINS_DIR, CONFIG_DIR, OUTPUTS_DIR,
+        PLUGINS_DIR, CORE_DIR, PROVIDERS_DIR, STORAGE_CONFIG,
+        DOCKER_NETWORK, PUBLIC_BASE_URL
+    )
+    from shell import run_shell, run_shell_simple, is_command_blocked
+    SHARED_MODULES_AVAILABLE = True
+    logger.info("Shared modules loaded")
+except ImportError as e:
+    logger.warning(f"Shared modules unavailable, using local definitions: {e}")
+    SHARED_MODULES_AVAILABLE = False
+    # Fallback definitions
+    SUPER_CLAUDE_ROOT = Path("/data")
+    DOMAINS_DIR = SUPER_CLAUDE_ROOT / "domains"
+    CONFIG_DIR = SUPER_CLAUDE_ROOT / "config"
+    OUTPUTS_DIR = SUPER_CLAUDE_ROOT / "outputs"
+    PLUGINS_DIR = SUPER_CLAUDE_ROOT / "mcps" / "super-claude" / "plugins"
+    CORE_DIR = SUPER_CLAUDE_ROOT / "mcps" / "super-claude" / "core"
+    PROVIDERS_DIR = SUPER_CLAUDE_ROOT / "mcps" / "super-claude" / "providers"
+    STORAGE_CONFIG = CONFIG_DIR / "storage_accounts.json"
+    DOCKER_NETWORK = "super-claude_super-claude-net"
+    PUBLIC_BASE_URL = "https://zanni.synology.me/super-claude-output"
+
+# =============================================================================
+# PLUGIN SYSTEM INITIALIZATION
+# =============================================================================
 if str(PLUGINS_DIR) not in sys.path:
     sys.path.insert(0, str(PLUGINS_DIR))
 
-# Import plugin system
 try:
     from plugin_loader import PluginLoader
     from plugin_manager import PluginManager
@@ -34,7 +64,6 @@ except ImportError as e:
     PLUGINS_AVAILABLE = False
 
 # Also import 1Password helper for backward compatibility
-sys.path.insert(0, "/app/shared")
 try:
     from op_client import get_secret, get_secret_by_ref, create_item
 except ImportError:
@@ -55,14 +84,9 @@ if PLUGINS_AVAILABLE:
         status = "✅" if success else "❌"
         logger.info(f"{status} Plugin {plugin_name}: {'loaded' if success else 'failed'}")
 
-
 # =============================================================================
 # STORAGE SYSTEM INITIALIZATION
 # =============================================================================
-CORE_DIR = SUPER_CLAUDE_ROOT / "mcps" / "super-claude" / "core"
-PROVIDERS_DIR = SUPER_CLAUDE_ROOT / "mcps" / "super-claude" / "providers"
-STORAGE_CONFIG = SUPER_CLAUDE_ROOT / "config" / "storage_accounts.json"
-
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
 if str(PROVIDERS_DIR) not in sys.path:
@@ -71,7 +95,6 @@ if str(PROVIDERS_DIR) not in sys.path:
 try:
     from storage_manager import StorageManager
     from providers.gdrive import GoogleDriveProvider
-    # supernote handled via plugin, not provider
     storage_manager = StorageManager(STORAGE_CONFIG)
     storage_manager.register_provider_type("gdrive", GoogleDriveProvider)
     STORAGE_AVAILABLE = True
@@ -82,16 +105,11 @@ except ImportError as e:
     STORAGE_AVAILABLE = False
 
 # =============================================================================
-# CONFIG
+# DOMAIN CONFIG
 # =============================================================================
-SUPER_CLAUDE_ROOT = Path("/data")
-DOCKER_NETWORK = "super-claude_super-claude-net"
-OUTPUTS_DIR = SUPER_CLAUDE_ROOT / "outputs"
-PUBLIC_BASE_URL = "https://zanni.synology.me/super-claude-output"
-
 def _load_domain_config() -> dict:
     """Load domain triggers and descriptions from config file."""
-    config_file = SUPER_CLAUDE_ROOT / "config" / "domain_triggers.json"
+    config_file = CONFIG_DIR / "domain_triggers.json"
     if config_file.exists():
         try:
             return json.loads(config_file.read_text())
@@ -110,7 +128,11 @@ DOMAIN_KEYWORDS = {
 # HELPERS
 # =============================================================================
 def _run_command(command: str, timeout: int = 30) -> tuple[bool, str]:
-    """Run shell command, return (success, output)"""
+    """Run shell command, return (success, output). Uses shared module if available."""
+    if SHARED_MODULES_AVAILABLE:
+        return run_shell(command, timeout, cwd=SUPER_CLAUDE_ROOT)
+    
+    # Fallback implementation
     try:
         result = subprocess.run(
             command,
@@ -131,12 +153,12 @@ def _run_command(command: str, timeout: int = 30) -> tuple[bool, str]:
 
 def _get_domain_path(domain: str) -> Path:
     """Get path for a domain"""
-    return SUPER_CLAUDE_ROOT / "domains" / domain
+    return DOMAINS_DIR / domain
 
 def _check_token_expiry() -> str | None:
     """Check if token is expiring soon. Returns warning message or None."""
     try:
-        state_file = SUPER_CLAUDE_ROOT / "domains" / "super-claude" / "state.json"
+        state_file = DOMAINS_DIR / "super-claude" / "state.json"
         if not state_file.exists():
             return None
         
@@ -160,7 +182,8 @@ def _check_token_expiry() -> str | None:
             return f"⚠️ Token expires in {days_until} days ({expires_at[:10]}). Consider generating a new token."
         
         return None
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Token expiry check failed: {e}")
         return None
 
 def _detect_domain(text: str) -> str | None:
@@ -174,12 +197,11 @@ def _detect_domain(text: str) -> str | None:
 
 def _get_available_domains() -> list[dict]:
     """Get list of available domains with their descriptions."""
-    domains_dir = SUPER_CLAUDE_ROOT / "domains"
-    if not domains_dir.exists():
+    if not DOMAINS_DIR.exists():
         return []
     
     domains = []
-    for item in sorted(domains_dir.iterdir()):
+    for item in sorted(DOMAINS_DIR.iterdir()):
         if item.is_dir() and not item.name.startswith("_"):
             config = DOMAIN_CONFIG.get(item.name, {})
             description = config.get("description", "")
@@ -196,6 +218,10 @@ def _get_available_domains() -> list[dict]:
 
 def _shell_exec_impl(command: str, timeout: int = 30) -> str:
     """Shell execution implementation - use this from other tools."""
+    if SHARED_MODULES_AVAILABLE:
+        return run_shell_simple(command, timeout)
+    
+    # Fallback implementation
     try:
         result = subprocess.run(
             command,
@@ -323,7 +349,7 @@ def ping() -> str:
 def token_status() -> str:
     """Check the status of the current authentication token."""
     try:
-        state_file = SUPER_CLAUDE_ROOT / "domains" / "super-claude" / "state.json"
+        state_file = DOMAINS_DIR / "super-claude" / "state.json"
         if not state_file.exists():
             return "❌ State file not found"
         
@@ -374,7 +400,7 @@ def token_status() -> str:
 def token_record(subject: str, issued_at: str, expires_at: str) -> str:
     """Record token information after generating a new token."""
     try:
-        state_file = SUPER_CLAUDE_ROOT / "domains" / "super-claude" / "state.json"
+        state_file = DOMAINS_DIR / "super-claude" / "state.json"
         if not state_file.exists():
             return "❌ State file not found"
         
@@ -459,12 +485,11 @@ def context_update(domain: str, key: str, value: str) -> str:
 @mcp.tool()
 def context_list() -> str:
     """List all available domains and their status."""
-    domains_dir = SUPER_CLAUDE_ROOT / "domains"
-    if not domains_dir.exists():
+    if not DOMAINS_DIR.exists():
         return "❌ Domains directory not found"
     
     domains = []
-    for item in sorted(domains_dir.iterdir()):
+    for item in sorted(DOMAINS_DIR.iterdir()):
         if item.is_dir() and not item.name.startswith("_"):
             has_md = (item / f"{item.name}.md").exists()
             
@@ -888,12 +913,8 @@ def rebuild_ops() -> str:
     return "\n".join(steps)
 
 # =============================================================================
-# =============================================================================
 # SUPERNOTE PLUGIN TOOLS
 # =============================================================================
-# Expose supernote plugin tools via MCP
-# Plugin handles sync between domains and cloud storage (where Supernote syncs)
-
 if PLUGINS_AVAILABLE and 'supernote' in plugin_loader.loaded_plugins:
     _supernote = plugin_loader.loaded_plugins['supernote']
     

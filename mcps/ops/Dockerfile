@@ -23,6 +23,9 @@ RUN apt-get update && \
 # Install uv for fast Python package management
 RUN pip install uv
 
+# Copy shared modules
+COPY shared/ /app/shared/
+
 # Copy MCP code
 COPY mcps/ops/ /app/
 
