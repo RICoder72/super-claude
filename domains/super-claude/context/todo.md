@@ -10,7 +10,7 @@
 - [x] Local folder structure (notes/, documents/, converted/)
 - [x] .note → PNG conversion via supernotelib
 - [x] base_path config for non-root Supernote sync folders
-- [ ] Note processing workflow (extract → markdown → move to processed)
+- [x] Note processing workflow (mark_processed moves notes to processed/)
 - [ ] Test push direction (documents to Supernote)
 
 ---
@@ -51,11 +51,9 @@
 - [ ] **Incremental pull**: Only download new/changed files
 
 ### Domain System Improvements
-- [ ] **Domain-specific instructions**: Like project instructions in Claude Projects
-  - Each domain could have an `instructions.md` that gets injected when domain is loaded
-  - Could customize Claude's behavior, tone, focus areas per domain
-  - Example: burrillville domain might include "always consider CJIS compliance for police-related items"
-  - Example: gaming domain might include "be casual, use gaming terminology"
+- [x] **Domain-specific instructions**: INSTRUCTIONS.md loaded with context_load (2026-01-17)
+- [x] **Global instructions**: INSTRUCTIONS.md at root loaded with session_start (2026-01-17)
+- [x] **instructions_get/set tools**: View and update instructions via tools (2026-01-17)
 - [ ] **Cross-domain search**: `context_search` tool to find relevant info across all domains
 - [ ] **Domain creation prompt**: Offer to create a domain when none detected after several turns
 - [ ] **Domain templates**: Streamline new domain creation with scaffolding command
@@ -129,6 +127,22 @@
 - [ ] Local-only mode (no auth, no SSL) for development
 - [ ] Environment-based config
 - [ ] Verify clean install from README
+
+### Plugin Ecosystem
+**Goal**: Enable community plugins and a marketplace-style approach.
+
+- [ ] **Separate plugins repo**: Move plugins out of core super-claude repo
+  - Decouple plugin versioning from core versioning
+  - Enable independent plugin development/contribution
+  - Requires defining stable plugin API/contract first
+- [ ] **Plugin API contract**: Define stable interface plugins can rely on
+  - Storage access patterns
+  - Config/state conventions
+  - Tool registration interface
+  - Avoid plugins reaching into server internals
+- [ ] **Plugin packaging**: Make plugins pip-installable packages
+- [ ] **Plugin registry/discovery**: Way to find and install community plugins
+- [ ] **Plugin documentation template**: Standard format for plugin READMEs
 
 ---
 
