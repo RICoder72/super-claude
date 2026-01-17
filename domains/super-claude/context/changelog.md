@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-01-17
+
+### Session: Documentation Restructure
+
+**What**: Consolidated scattered development records into four canonical files with clear purposes.
+
+**Problem**: Documentation was duplicated and scattered:
+- `recentChanges` in state.json duplicated changelog.md
+- Backlog items split between state.json and roadmap.md
+- `planned_features` in state.json overlapped with roadmap.md
+- roadmap.md mixed todo items with architecture diagrams
+
+**Solution**: Four canonical files in `context/`:
+
+| File | Purpose |
+|------|---------|
+| `features.md` | What Super Claude does — tools, capabilities, integrations |
+| `changelog.md` | Session summaries — what changed and why |
+| `todo.md` | Prioritized backlog — what to work on next |
+| `architecture.md` | System design — ADRs, diagrams, infrastructure |
+
+**Changes**:
+- Created `features.md` — extracted from super-claude.md and scattered docs
+- Created `todo.md` — consolidated from state.json backlog + planned_features + roadmap.md
+- Created `architecture.md` — expanded decisions.md with diagrams from roadmap.md, added ADR-006 (plugins) and ADR-007 (documentation structure)
+- Deleted `roadmap.md` (content migrated to todo.md and architecture.md)
+- Deleted `decisions.md` (content migrated to architecture.md)
+- Cleaned up `state.json` — removed redundant fields (backlog, planned_features, recentChanges, notes), kept only runtime state
+- Updated `super-claude.md` — new session wrap-up protocol, updated pointers table
+
+**Session wrap-up protocol** now requires updating the four canonical files at end of session, then committing to git.
+
+**Result**: Single source of truth for each concern. All development docs tracked in git.
+
+---
+
 ## 2026-01-16
 
 ### Session: Abstract Storage Layer

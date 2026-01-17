@@ -13,6 +13,7 @@ A Docker-based MCP server running on Matthew's Synology NAS that provides:
 - **Docker tools**: Container management
 - **Context tools**: Domain-specific knowledge loading
 - **Publish tools**: Make files web-accessible
+- **Storage tools**: Cloud storage abstraction (Google Drive, etc.)
 
 ## Quick Reference
 
@@ -28,76 +29,56 @@ A Docker-based MCP server running on Matthew's Synology NAS that provides:
 | Store secret | `auth_set("title", '{"credential": "value"}')` |
 | Load domain | `context_load("domain-name")` |
 | Publish file | `publish("path/to/file")` |
+| List storage | `storage_list_files("account", "/path")` |
 
-## Architecture
+## Session Protocol
 
-```
-┌─────────────────────────────────────────────────────┐
-│  Claude Interfaces                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
-│  │ Mobile   │  │ Web      │  │ Code     │          │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘          │
-└───────┼─────────────┼─────────────┼────────────────┘
-        │             │             │
-        └─────────────┼─────────────┘
-                      │ (MCP over HTTPS)
-                      ▼
-        ┌─────────────────────────────┐
-        │  super-claude (Docker)      │
-        │  zanni.synology.me/mcp      │
-        │                             │
-        │  /data (mounted volume)     │
-        │  ├── mcps/                  │
-        │  ├── domains/               │
-        │  ├── shared/                │
-        │  └── config/                │
-        └─────────────────────────────┘
-```
+**In-flight:**
+- When something significant happens (decision, architecture change, new capability, blocker), mention it
+- Don't prompt for minor/obvious things
 
-## Domain System
+**End-of-session (when user says "wrap up" or "end session"):**
 
-Domains are isolated knowledge areas. Each contains:
-- `{domain}.md` - Always loaded. Player profile, goals, how to respond.
-- `state.json` - Lightweight session state.
-- `context/` - Reference files loaded on demand.
+Update these four files in `context/`:
 
-**Active domains**: See `context_list()` for current inventory.
+| File | Update with... |
+|------|----------------|
+| `changelog.md` | Session summary: what we did, why, key decisions |
+| `todo.md` | New items, completed items (move to changelog), priority changes |
+| `features.md` | New capabilities, tools, or integrations added |
+| `architecture.md` | New ADRs, diagram changes, infrastructure updates |
+
+Then update `state.json`:
+- `active_work`: Current focus for next session
+- `last_session_summary`: One-line description
+
+Finally, commit to git with descriptive message.
+
+## Documentation
+
+| Topic | Location |
+|-------|----------|
+| **Development docs** | |
+| Features & capabilities | `context/features.md` |
+| Change history | `context/changelog.md` |
+| Backlog & roadmap | `context/todo.md` |
+| System design & ADRs | `context/architecture.md` |
+| **Reference docs** | |
+| Why this exists | `context/why.md` |
+| Deploy from scratch | `context/setup-guide.md` |
+| Operations & troubleshooting | `context/operations.md` |
+| Domain design philosophy | `context/domain-philosophy.md` |
+| Folder structure | `context/file-structure.md` |
+| Claude Code setup | `context/claude-code-setup.md` |
+| Reusable prompts | `context/prompts.md` |
 
 ## Infrastructure
 
 - **Host**: Synology RS1221+ with UPS
 - **Network**: Ubiquiti, DDNS via zanni.synology.me
-- **Containers**: super-claude (8000), super-claude-ops (8001), super-claude-router (8080)
+- **Containers**: super-claude (8000), super-claude-ops (8001), super-claude-router (8080), super-claude-auth (8002)
 - **Auth**: 1Password service account + OAuth/JWT
-- **Docker network**: super-claude_super-claude-net (all containers must be on this)
-
-## Session Protocol
-
-**In-flight:**
-- When something significant happens (decision, architecture change, new capability, blocker), ask: "Worth saving X to state?"
-- If yes, update state.json
-- Don't prompt for minor/obvious things
-
-**End-of-session:**
-- User says "wrap up" or "end session"
-- Review what happened, propose anything worth capturing
-- Ask if user has anything to add
-- Update state.json and close out
-
-## Pointers
-
-| Topic | Location |
-|-------|----------|
-| Why this exists, design principles | `context/why.md` |
-| Deploy from scratch | `context/setup-guide.md` |
-| Day-to-day operations, troubleshooting | `context/operations.md` |
-| How to create/design domains | `context/domain-philosophy.md` |
-| What's in each folder | `context/file-structure.md` |
-| Claude Code integration | `context/claude-code-setup.md` |
-| Planned features | `context/roadmap.md` |
-| Architecture decisions | `context/decisions.md` |
-| Change history | `context/changelog.md` |
-| Reusable prompts | `context/prompts.md` |
+- **Docker network**: super-claude_super-claude-net
 
 ## Matthew's Working Style
 

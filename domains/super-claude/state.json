@@ -1,20 +1,13 @@
 {
-  "version": "0.6.0",
-  "lastDeploy": "2026-01-16",
+  "version": "0.6.1",
   "lastSession": "2026-01-17",
-  "containerName": "super-claude",
   "status": "active",
-  "architecture": "docker-compose with nginx router + OAuth",
   "endpoints": {
     "main": "https://zanni.synology.me/mcp",
     "ops": "https://zanni.synology.me/ops"
   },
-  "network": "super-claude_super-claude-net",
   "auth": {
-    "enabled": true,
     "type": "OAuth 2.0 (authorization_code + PKCE)",
-    "secretSource": "1Password: Key Vault / Super Claude JWT Secret",
-    "credentialsSource": "1Password: Key Vault / Super Claude OAuth Credentials",
     "token": {
       "subject": "super-claude-client",
       "issuedAt": "2026-01-04T21:19:46Z",
@@ -22,91 +15,11 @@
       "warnDaysBefore": 14
     }
   },
-  "notes": [
-    "All 4 containers must be on super-claude_super-claude-net (router, auth, mcp, ops)",
-    "Rebuild commands include --network flag automatically",
-    "Context tools: context_load, context_get, context_update, context_list",
-    "Natural domain invocation via session_start and keyword detection",
-    "OAuth authentication with authorization_code + PKCE flow"
-  ],
-  "openSourcePrep": {
-    "sampleDomains": {
-      "entertainment": "complete - simple showcase for movie/TV recs",
-      "pythonLab": "planned - complex showcase with own MCP/container"
-    },
-    "openQuestions": [
-      "Hands-free voice interface - wake word or always-on Claude triggering"
-    ],
-    "resolvedQuestions": [
-      "Domain triggering UX - SOLVED: keyword detection in session_start + improved tool descriptions"
-    ]
-  },
-  "lastUpdated": "2026-01-17",
-  "recentChanges": [
-    "2026-01-16: Plugin system deployed - op_auth and supernote plugins live",
-    "2026-01-16: Fixed plugin loading (renamed onepassword\u2192op_auth, skip infra files)",
-    "2026-01-16: Added plugin management tools (plugin_status, plugin_reload, etc.)",
-    "2026-01-11: Fixed FunctionTool bug (tools calling other tools)",
-    "2026-01-11: Claude Code setup with JWT token (expires 2026-07-10)"
-  ],
-  "backlog": [
-    "Chat-to-domain capture: Ability to summarize/save chat content to relevant domain before deletion",
-    "Domain meta-tagging: Categorize domains for cross-referencing (e.g., gaming+msf are both games)",
-    "Cross-domain search: Tool to search other domains for relevant context (context_search)",
-    "Domain creation prompt: If no domain detected, offer to create one for the conversation topic",
-    "1Password naming cleanup: Review and standardize item names in Key Vault",
-    "Default session checking: Explore User Preferences or other hooks to auto-load context",
-    "Guardrails: Prevent shell_exec from stopping/removing critical containers",
-    "Cloudflare: Partially configured for ricoder.me - needs DNS records for backup path",
-    "Self-recovery: Watchdog or webhook to restart router without SSH",
-    "Reference materials convention: Document pattern for storing artifacts (IC10 programs, research data, etc.) in context/ folder - add 'Reference Materials' section to domain.md template listing available files without auto-loading them"
-  ],
-  "planned_features": {
-    "safety_mode": {
-      "description": "On-demand safety mode that blocks write/delete operations",
-      "details": [
-        "Add permission metadata to tools (read/write/dangerous)",
-        "Toggle via voice command with passphrase verification",
-        "When active, block write/delete/dangerous ops",
-        "Passphrase stored securely, verified in transcript"
-      ],
-      "status": "planned"
-    },
-    "cloud_storage_interface": {
-      "description": "Core abstraction for cloud storage with named accounts",
-      "details": [
-        "Provider interface: upload, download, list, exists",
-        "Account system: user-defined labels (work, personal, etc)",
-        "Multiple providers: Google Drive, OneDrive, Dropbox, Supernote Cloud",
-        "Multiple accounts per provider supported",
-        "Plugins reference accounts by name, not provider details",
-        "Credentials stored via auth plugin (1Password)"
-      ],
-      "plugin_config_example": {
-        "sync_account": "work",
-        "remote_path": "/SuperClaude/",
-        "task_file": "task_list.md"
-      },
-      "status": "planned"
-    }
-  },
   "plugins": {
-    "op_auth": {
-      "status": "active",
-      "tools": [
-        "auth_get",
-        "auth_set",
-        "auth_get_ref"
-      ]
-    },
-    "supernote": {
-      "status": "skeleton",
-      "tools": [
-        "supernote_sync_push",
-        "supernote_sync_pull",
-        "supernote_list_files"
-      ]
-    }
+    "op_auth": "active",
+    "storage": "active",
+    "supernote": "skeleton"
   },
-  "active_work": "Google Drive + Supernote plugin integration. gdrive.py and supernote.py created, awaiting OAuth credentials from Matthew."
+  "active_work": "Documentation restructure complete. Storage layer working with Google Drive.",
+  "last_session_summary": "Restructured development documentation into four canonical files: features.md, changelog.md, todo.md, architecture.md. Removed redundant fields from state.json."
 }
