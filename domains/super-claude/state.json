@@ -41,7 +41,7 @@
       "Domain triggering UX - SOLVED: keyword detection in session_start + improved tool descriptions"
     ]
   },
-  "lastUpdated": "2026-01-16",
+  "lastUpdated": "2026-01-17",
   "recentChanges": [
     "2026-01-16: Plugin system deployed - op_auth and supernote plugins live",
     "2026-01-16: Fixed plugin loading (renamed onepassword\u2192op_auth, skip infra files)",
@@ -71,6 +71,23 @@
         "Passphrase stored securely, verified in transcript"
       ],
       "status": "planned"
+    },
+    "cloud_storage_interface": {
+      "description": "Core abstraction for cloud storage with named accounts",
+      "details": [
+        "Provider interface: upload, download, list, exists",
+        "Account system: user-defined labels (work, personal, etc)",
+        "Multiple providers: Google Drive, OneDrive, Dropbox, Supernote Cloud",
+        "Multiple accounts per provider supported",
+        "Plugins reference accounts by name, not provider details",
+        "Credentials stored via auth plugin (1Password)"
+      ],
+      "plugin_config_example": {
+        "sync_account": "work",
+        "remote_path": "/SuperClaude/",
+        "task_file": "task_list.md"
+      },
+      "status": "planned"
     }
   },
   "plugins": {
@@ -90,5 +107,6 @@
         "supernote_list_files"
       ]
     }
-  }
+  },
+  "active_work": "Google Drive + Supernote plugin integration. gdrive.py and supernote.py created, awaiting OAuth credentials from Matthew."
 }

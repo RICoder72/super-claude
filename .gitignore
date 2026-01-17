@@ -39,3 +39,4 @@ logs/
 
 # Outputs (generated files)
 outputs/
+config/gdrive_*.json

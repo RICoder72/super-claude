@@ -55,6 +55,33 @@ if PLUGINS_AVAILABLE:
         status = "✅" if success else "❌"
         logger.info(f"{status} Plugin {plugin_name}: {'loaded' if success else 'failed'}")
 
+
+# =============================================================================
+# STORAGE SYSTEM INITIALIZATION
+# =============================================================================
+CORE_DIR = SUPER_CLAUDE_ROOT / "mcps" / "super-claude" / "core"
+PROVIDERS_DIR = SUPER_CLAUDE_ROOT / "mcps" / "super-claude" / "providers"
+STORAGE_CONFIG = SUPER_CLAUDE_ROOT / "config" / "storage_accounts.json"
+
+if str(CORE_DIR) not in sys.path:
+    sys.path.insert(0, str(CORE_DIR))
+if str(PROVIDERS_DIR) not in sys.path:
+    sys.path.insert(0, str(PROVIDERS_DIR))
+
+try:
+    from storage_manager import StorageManager
+    from gdrive import GoogleDriveProvider
+    from supernote import SupernoteProvider
+    storage_manager = StorageManager(STORAGE_CONFIG)
+    storage_manager.register_provider_type("gdrive", GoogleDriveProvider)
+    storage_manager.register_provider_type("supernote", SupernoteProvider)
+    STORAGE_AVAILABLE = True
+    logger.info("Storage system initialized")
+except ImportError as e:
+    logger.warning(f"Storage system unavailable: {e}")
+    storage_manager = None
+    STORAGE_AVAILABLE = False
+
 # =============================================================================
 # CONFIG
 # =============================================================================
@@ -759,6 +786,66 @@ if PLUGINS_AVAILABLE:
     def plugin_list() -> str:
         """List all available plugins."""
         return plugin_manager.list_available()
+
+# =============================================================================
+# STORAGE TOOLS (Cloud Storage with Named Accounts)
+# =============================================================================
+if STORAGE_AVAILABLE:
+    @mcp.tool()
+    def storage_list_accounts() -> str:
+        """List all configured storage accounts."""
+        return storage_manager.list_accounts()
+    
+    @mcp.tool()
+    def storage_add_account(
+        name: str,
+        provider: str,
+        credentials_ref: str = "",
+        config: str = "{}"
+    ) -> str:
+        """
+        Add a new storage account.
+        
+        Args:
+            name: Account label (e.g., "work", "personal")
+            provider: Provider type ("gdrive", "supernote", "onedrive", "dropbox")
+            credentials_ref: 1Password reference for credentials
+            config: JSON string with provider config
+        """
+        try:
+            config_dict = json.loads(config) if config else {}
+            return storage_manager.add_account(name, provider, credentials_ref, config_dict)
+        except json.JSONDecodeError as e:
+            return f"Invalid config JSON: {e}"
+    
+    @mcp.tool()
+    def storage_remove_account(name: str) -> str:
+        """Remove a storage account."""
+        return storage_manager.remove_account(name)
+    
+    @mcp.tool()
+    async def storage_list_files(account: str, path: str = "/") -> str:
+        """List files in a storage account."""
+        files = await storage_manager.list_files(account, path)
+        if not files:
+            return f"No files found at {path}"
+        lines = [f"Files at {account}:{path}", "-" * 40]
+        for f in files:
+            icon = "D" if f.is_directory else "F"
+            lines.append(f"[{icon}] {f.name}")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def storage_upload(account: str, local_path: str, remote_path: str) -> str:
+        """Upload a file to cloud storage."""
+        local = _validate_path(local_path)
+        return await storage_manager.upload(account, local, remote_path)
+    
+    @mcp.tool()
+    async def storage_download(account: str, remote_path: str, local_path: str) -> str:
+        """Download a file from cloud storage."""
+        local = _validate_path(local_path)
+        return await storage_manager.download(account, remote_path, local)
 
 # =============================================================================
 # OPS MANAGEMENT
