@@ -1,5 +1,5 @@
 """
-Supernote Sync Plugin v0.5.0
+Supernote Sync Plugin v0.6.0
 
 Syncs files between Super Claude domains and cloud storage (where Supernote device syncs).
 Does NOT talk to Supernote directly - uses Super Claude's storage abstraction.
@@ -9,7 +9,12 @@ Architecture:
 
 Per-domain config stored in: domains/{name}/plugins/supernote/config.json
 
-New in v0.5.0:
+New in v0.6.0:
+- supernote_mark_processed: Move completed notes to processed folder
+- supernote_unprocess: Restore notes to pending
+- supernote_list_notes: Now shows pending/processed sections
+
+v0.5.0:
 - supernote_read_note: Returns note pages as images (for Claude vision)
 - supernote_read_page: Returns a single page as image
 - supernote_list_notes: Lists available notes with page counts
@@ -56,7 +61,7 @@ class SupernotePlugin(SuperClaudePlugin):
         """Initialize the plugin."""
         self.metadata = {
             "name": "supernote",
-            "version": "0.5.0",
+            "version": "0.6.0",
             "description": "Sync domains with Supernote via cloud storage",
             "author": "Matthew",
             "requires": []
@@ -71,6 +76,8 @@ class SupernotePlugin(SuperClaudePlugin):
             "supernote_list_notes": self.supernote_list_notes,
             "supernote_read_note": self.supernote_read_note,
             "supernote_read_page": self.supernote_read_page,
+            "supernote_mark_processed": self.supernote_mark_processed,
+            "supernote_unprocess": self.supernote_unprocess,
         }
     
     def _get_storage_manager(self):
@@ -344,12 +351,13 @@ Use `supernote_read_note("{domain}", "note_stem")` to view converted pages."""
         except Exception as e:
             return f"❌ Failed to list remote files: {e}"
     
-    async def supernote_list_notes(self, domain: str) -> str:
+    async def supernote_list_notes(self, domain: str, include_processed: bool = False) -> str:
         """
         List available notes for a domain with their page counts.
         
         Args:
             domain: Domain name
+            include_processed: Whether to show processed notes (default: False)
         
         Returns:
             List of notes and their converted pages
@@ -360,29 +368,47 @@ Use `supernote_read_note("{domain}", "note_stem")` to view converted pages."""
         
         plugin_path = self._get_plugin_path(domain)
         notes_dir = plugin_path / "notes"
+        processed_dir = plugin_path / "processed"
         converted_dir = plugin_path / "converted"
         
-        if not notes_dir.exists():
-            return f"📂 No notes directory for {domain}"
+        # Get pending notes
+        pending_notes = sorted(notes_dir.glob("*.note")) if notes_dir.exists() else []
+        processed_notes = sorted(processed_dir.glob("*.note")) if processed_dir.exists() else []
         
-        notes = sorted(notes_dir.glob("*.note"))
-        if not notes:
-            return f"📂 No .note files in {domain}"
+        if not pending_notes and not processed_notes:
+            return f"📂 No notes found in {domain}. Run supernote_pull first."
         
         lines = [f"📓 Notes in {domain}", "─" * 40]
         
-        for note in notes:
-            stem = note.stem
-            pages = list(converted_dir.glob(f"{stem}_*.png"))
-            page_count = len(pages)
-            
-            if page_count > 0:
-                lines.append(f"✅ {stem} ({page_count} pages)")
-            else:
-                lines.append(f"⚠️ {stem} (not converted)")
+        # Pending notes section
+        if pending_notes:
+            lines.append(f"\n**Pending** ({len(pending_notes)} notes):")
+            for note in pending_notes:
+                stem = note.stem
+                pages = list(converted_dir.glob(f"{stem}_*.png"))
+                page_count = len(pages)
+                
+                if page_count > 0:
+                    lines.append(f"  📝 {stem} ({page_count} pages)")
+                else:
+                    lines.append(f"  ⚠️ {stem} (not converted)")
+        else:
+            lines.append("\n**Pending:** (none)")
+        
+        # Processed notes section
+        if include_processed and processed_notes:
+            lines.append(f"\n**Processed** ({len(processed_notes)} notes):")
+            for note in processed_notes:
+                stem = note.stem
+                pages = list(converted_dir.glob(f"{stem}_*.png"))
+                page_count = len(pages)
+                lines.append(f"  ✅ {stem} ({page_count} pages)")
+        elif processed_notes:
+            lines.append(f"\n({len(processed_notes)} processed notes hidden - use include_processed=True)")
         
         lines.append("")
         lines.append("Use `supernote_read_note(domain, note_stem)` to view pages.")
+        lines.append("Use `supernote_mark_processed(domain, note_stem)` when done.")
         
         return "\n".join(lines)
     
@@ -615,7 +641,7 @@ Use `supernote_read_note("{domain}", "note_stem")` to view converted pages."""
     
     def on_load(self) -> None:
         """Called when plugin loads."""
-        logger.info("Supernote plugin v0.5.0 loaded with image support")
+        logger.info("Supernote plugin v0.6.0 loaded with image support")
     
     def on_unload(self) -> None:
         """Called when plugin unloaded."""

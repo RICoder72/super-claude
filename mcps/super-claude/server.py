@@ -973,17 +973,18 @@ if PLUGINS_AVAILABLE and 'supernote' in plugin_loader.loaded_plugins:
         return await _supernote.supernote_list_remote(domain, path_type)
 
     @mcp.tool()
-    async def supernote_list_notes(domain: str) -> str:
+    async def supernote_list_notes(domain: str, include_processed: bool = False) -> str:
         """
         List available notes for a domain with their page counts.
         
         Args:
             domain: Domain name
+            include_processed: Whether to show processed notes (default: False)
         
         Returns:
             List of notes and their converted pages
         """
-        return await _supernote.supernote_list_notes(domain)
+        return await _supernote.supernote_list_notes(domain, include_processed)
     
     @mcp.tool()
     async def supernote_read_note(domain: str, note_stem: str):
@@ -1016,6 +1017,37 @@ if PLUGINS_AVAILABLE and 'supernote' in plugin_loader.loaded_plugins:
             Image object that Claude can see
         """
         return await _supernote.supernote_read_page(domain, note_stem, page)
+    
+    @mcp.tool()
+    async def supernote_mark_processed(domain: str, note_stem: str) -> str:
+        """
+        Mark a note as processed by moving it to the processed folder.
+        
+        The .note file moves to processed/. Converted PNGs stay in converted/
+        for future reference.
+        
+        Args:
+            domain: Domain name
+            note_stem: Note filename without extension (e.g., "20260116_140203")
+        
+        Returns:
+            Confirmation message
+        """
+        return await _supernote.supernote_mark_processed(domain, note_stem)
+    
+    @mcp.tool()
+    async def supernote_unprocess(domain: str, note_stem: str) -> str:
+        """
+        Move a processed note back to pending.
+        
+        Args:
+            domain: Domain name
+            note_stem: Note filename without extension
+        
+        Returns:
+            Confirmation message
+        """
+        return await _supernote.supernote_unprocess(domain, note_stem)
 
 # MAIN
 # =============================================================================
