@@ -2,6 +2,7 @@
 Google Drive Storage Provider
 
 Implements StorageProvider interface for Google Drive.
+Uses existing token file or credentials from account config.
 """
 
 import sys
@@ -17,15 +18,17 @@ from storage_interface import StorageProvider, StorageAccount, FileInfo
 
 logger = logging.getLogger(__name__)
 
+# Standard token location
+TOKEN_PATH = Path("/data/config/gdrive_token.json")
+
 
 class GoogleDriveProvider(StorageProvider):
     """
     Google Drive storage provider.
     
-    Requires:
-    - google-api-python-client
-    - google-auth-oauthlib
-    - Credentials stored in 1Password
+    Authentication priority:
+    1. Existing token file at /data/config/gdrive_token.json
+    2. credentials_json in account.config (for programmatic setup)
     """
     
     provider_type = "gdrive"
@@ -39,25 +42,43 @@ class GoogleDriveProvider(StorageProvider):
         """Connect to Google Drive API."""
         try:
             from google.oauth2.credentials import Credentials
+            from google.auth.transport.requests import Request
             from googleapiclient.discovery import build
             
-            # Get credentials from 1Password
-            # Expected format: JSON with token info
-            # For now, placeholder - actual implementation would call auth_get
-            creds_json = self.account.config.get("credentials_json")
-            if not creds_json:
-                logger.error("No credentials configured for Google Drive")
+            creds = None
+            
+            # Priority 1: Check for existing token file
+            if TOKEN_PATH.exists():
+                try:
+                    creds = Credentials.from_authorized_user_file(str(TOKEN_PATH))
+                    logger.info("Loaded credentials from token file")
+                except Exception as e:
+                    logger.warning(f"Failed to load token file: {e}")
+            
+            # Priority 2: credentials_json in config (fallback)
+            if not creds:
+                creds_json = self.account.config.get("credentials_json")
+                if creds_json:
+                    creds_data = json.loads(creds_json) if isinstance(creds_json, str) else creds_json
+                    creds = Credentials.from_authorized_user_info(creds_data)
+                    logger.info("Loaded credentials from config")
+            
+            if not creds:
+                logger.error("No credentials available. Complete OAuth flow first.")
                 return False
             
-            creds_data = json.loads(creds_json) if isinstance(creds_json, str) else creds_json
-            creds = Credentials.from_authorized_user_info(creds_data)
+            # Refresh if expired
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+                # Save refreshed token
+                with open(TOKEN_PATH, 'w') as f:
+                    f.write(creds.to_json())
+                logger.info("Token refreshed and saved")
             
             self._service = build('drive', 'v3', credentials=creds)
             
-            # Get or create root folder if specified
-            root_path = self.account.config.get("root_path", "/SuperClaude")
-            if root_path and root_path != "/":
-                self._root_folder_id = await self._ensure_folder(root_path)
+            # Test connection
+            self._service.about().get(fields="user").execute()
             
             logger.info(f"✅ Connected to Google Drive: {self.account.name}")
             return True
@@ -74,39 +95,27 @@ class GoogleDriveProvider(StorageProvider):
         self._service = None
         self._root_folder_id = None
     
-    async def _ensure_folder(self, path: str) -> Optional[str]:
-        """Ensure folder exists, create if needed. Returns folder ID."""
-        if not self._service:
-            return None
+    def _resolve_path(self, path: str) -> str:
+        """Resolve a path like '/Supernote/Note' to a folder ID."""
+        if not path or path == "/":
+            return "root"
+        
+        if not path.startswith("/"):
+            return path  # Already an ID
         
         parts = [p for p in path.split("/") if p]
-        parent_id = "root"
+        current_id = "root"
         
         for part in parts:
-            # Search for folder
-            query = f"name='{part}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            query = f"name='{part}' and '{current_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
             results = self._service.files().list(q=query, fields="files(id, name)").execute()
             files = results.get('files', [])
             
-            if files:
-                parent_id = files[0]['id']
-            else:
-                # Create folder
-                metadata = {
-                    'name': part,
-                    'mimeType': 'application/vnd.google-apps.folder',
-                    'parents': [parent_id]
-                }
-                folder = self._service.files().create(body=metadata, fields='id').execute()
-                parent_id = folder['id']
+            if not files:
+                raise ValueError(f"Folder not found: {part} in path {path}")
+            current_id = files[0]['id']
         
-        return parent_id
-    
-    def _get_parent_id(self, remote_path: str) -> str:
-        """Get parent folder ID for a path."""
-        if self._root_folder_id:
-            return self._root_folder_id
-        return "root"
+        return current_id
     
     async def upload(self, local_path: Path, remote_path: str) -> str:
         """Upload file to Google Drive."""
@@ -117,7 +126,12 @@ class GoogleDriveProvider(StorageProvider):
             from googleapiclient.http import MediaFileUpload
             
             file_name = Path(remote_path).name
-            parent_id = self._get_parent_id(remote_path)
+            parent_path = str(Path(remote_path).parent)
+            
+            try:
+                parent_id = self._resolve_path(parent_path) if parent_path != "." else "root"
+            except ValueError:
+                parent_id = "root"
             
             # Check if file exists
             query = f"name='{file_name}' and '{parent_id}' in parents and trashed=false"
@@ -127,24 +141,12 @@ class GoogleDriveProvider(StorageProvider):
             media = MediaFileUpload(str(local_path), resumable=True)
             
             if existing:
-                # Update existing
                 file_id = existing[0]['id']
-                self._service.files().update(
-                    fileId=file_id,
-                    media_body=media
-                ).execute()
+                self._service.files().update(fileId=file_id, media_body=media).execute()
                 return f"✅ Updated: {remote_path}"
             else:
-                # Create new
-                metadata = {
-                    'name': file_name,
-                    'parents': [parent_id]
-                }
-                self._service.files().create(
-                    body=metadata,
-                    media_body=media,
-                    fields='id'
-                ).execute()
+                metadata = {'name': file_name, 'parents': [parent_id]}
+                self._service.files().create(body=metadata, media_body=media, fields='id').execute()
                 return f"✅ Uploaded: {remote_path}"
                 
         except Exception as e:
@@ -160,7 +162,12 @@ class GoogleDriveProvider(StorageProvider):
             import io
             
             file_name = Path(remote_path).name
-            parent_id = self._get_parent_id(remote_path)
+            parent_path = str(Path(remote_path).parent)
+            
+            try:
+                parent_id = self._resolve_path(parent_path) if parent_path != "." else "root"
+            except ValueError:
+                return f"❌ Path not found: {remote_path}"
             
             # Find file
             query = f"name='{file_name}' and '{parent_id}' in parents and trashed=false"
@@ -192,12 +199,13 @@ class GoogleDriveProvider(StorageProvider):
             return []
         
         try:
-            parent_id = self._get_parent_id(remote_path)
+            parent_id = self._resolve_path(remote_path)
             
             query = f"'{parent_id}' in parents and trashed=false"
             results = self._service.files().list(
                 q=query,
-                fields="files(id, name, size, modifiedTime, mimeType)"
+                fields="files(id, name, size, modifiedTime, mimeType)",
+                orderBy="name"
             ).execute()
             
             files = []
@@ -230,7 +238,12 @@ class GoogleDriveProvider(StorageProvider):
         
         try:
             file_name = Path(remote_path).name
-            parent_id = self._get_parent_id(remote_path)
+            parent_path = str(Path(remote_path).parent)
+            
+            try:
+                parent_id = self._resolve_path(parent_path) if parent_path != "." else "root"
+            except ValueError:
+                return False
             
             query = f"name='{file_name}' and '{parent_id}' in parents and trashed=false"
             results = self._service.files().list(q=query, fields="files(id)").execute()
@@ -247,7 +260,12 @@ class GoogleDriveProvider(StorageProvider):
         
         try:
             file_name = Path(remote_path).name
-            parent_id = self._get_parent_id(remote_path)
+            parent_path = str(Path(remote_path).parent)
+            
+            try:
+                parent_id = self._resolve_path(parent_path) if parent_path != "." else "root"
+            except ValueError:
+                return f"❌ Path not found: {remote_path}"
             
             query = f"name='{file_name}' and '{parent_id}' in parents and trashed=false"
             results = self._service.files().list(q=query, fields="files(id)").execute()

@@ -1,0 +1,9 @@
+{
+  "accounts": {
+    "personal": {
+      "provider": "gdrive",
+      "credentials_ref": "op://Key Vault/Google Drive OAuth - Personal",
+      "config": {}
+    }
+  }
+}

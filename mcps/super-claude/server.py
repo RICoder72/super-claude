@@ -70,8 +70,8 @@ if str(PROVIDERS_DIR) not in sys.path:
 
 try:
     from storage_manager import StorageManager
-    from gdrive import GoogleDriveProvider
-    from supernote import SupernoteProvider
+    from providers.gdrive import GoogleDriveProvider
+    from supernote_provider import SupernoteProvider
     storage_manager = StorageManager(STORAGE_CONFIG)
     storage_manager.register_provider_type("gdrive", GoogleDriveProvider)
     storage_manager.register_provider_type("supernote", SupernoteProvider)

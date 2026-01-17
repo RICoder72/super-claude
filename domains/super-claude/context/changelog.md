@@ -1,6 +1,68 @@
 # Changelog
 
+## 2026-01-16
+
+### Session: Abstract Storage Layer
+
+**What**: Built provider-agnostic cloud storage system so plugins can access any storage account without knowing the underlying service.
+
+**Architecture**:
+```
+MCP Tools (abstract)     →  storage_list_files("personal", "/path")
+        ↓
+Storage Manager          →  routes by account name
+        ↓
+Providers                →  gdrive, supernote, (future: dropbox, onedrive)
+```
+
+**Changes**:
+- Created storage abstraction layer:
+  - `core/storage_interface.py` - defines StorageProvider contract
+  - `core/storage_manager.py` - routes requests to correct provider
+  - `providers/gdrive.py` - Google Drive implementation
+- Added MCP tools:
+  - `storage_list_accounts` - show configured accounts
+  - `storage_list_files(account, path)` - list files
+  - `storage_download(account, remote, local)` - download file
+  - `storage_upload(account, local, remote)` - upload file
+  - `storage_add_account` / `storage_remove_account` - manage accounts
+- Completed Google Drive OAuth flow, token stored at `/data/config/gdrive_token.json`
+- Added google-api-python-client to pyproject.toml dependencies
+- Removed redundant `plugins/gdrive.py` (was bypassing abstraction)
+- Created `context/storage-architecture.md` documentation
+
+**Configuration**:
+- Accounts stored in `/data/config/storage_accounts.json`
+- Credentials referenced via 1Password (`credentials_ref`)
+- First account configured: `personal` (gdrive)
+
+**Result**: `storage_list_files("personal", "/")` returns Google Drive root listing. Plugins can now use storage without knowing provider details.
+
+---
+
 ## 2026-01-11
+
+### Session: Domain Awareness Enhancement
+
+**What**: Made domain system smarter about loading and discovering domains
+
+**Changes**:
+- Created `config/domain_triggers.json` - centralized domain metadata (descriptions + triggers)
+- `session_start` now shows descriptions for all domains, making their purpose clear
+- `context_load` warns when a domain has no triggers configured
+- All 10 domains now have descriptions and trigger keywords
+
+**User Preferences addition**:
+```
+# Domain Awareness
+
+When working with Super Claude domains:
+- If a domain lacks trigger keywords when loaded, point it out and offer to add some
+- If we've been discussing a topic for several turns that doesn't match any existing domain, ask if it's something worth creating a domain for
+- Don't be pushy about domain creation - one gentle offer is enough
+```
+
+**Result**: User said "I was thinking of revising my 90 day plan for my new role as director of technology" and Claude automatically loaded burrillville domain + the 90-day plan context file. Friction-free.
 
 ### Session: Bug Fixes, Documentation & Claude Code
 - Fixed FunctionTool bug: decorated tools couldn't call other decorated tools
@@ -17,6 +79,8 @@
   - Token expires 2026-07-10 (180 days)
   - Documented `claude mcp add` command with bearer token
 
+---
+
 ## 2026-01-04
 
 ### Session: OAuth Authentication
@@ -32,6 +96,8 @@
   - `ping()` warns when token expires within 14 days
 - Tokens valid for 180 days (expires 2026-07-03)
 - Both Super Claude and Super Claude Ops secured with same OAuth credentials
+
+---
 
 ## 2024-12-27
 
@@ -59,6 +125,8 @@
 - Added backup/restore and git tools to ops
 - Pushed all changes to GitHub
 
+---
+
 ## 2024-12-26
 
 ### Session: Tracer Bullet
@@ -69,26 +137,3 @@
 - Connected as custom connector in Claude
 - Successfully called ping tool from Claude mobile
 - **Result**: Full path proven working
-
-
-## 2026-01-11: Domain Awareness Enhancement
-
-**What**: Made domain system smarter about loading and discovering domains
-
-**Changes**:
-- Created `config/domain_triggers.json` - centralized domain metadata (descriptions + triggers)
-- `session_start` now shows descriptions for all domains, making their purpose clear
-- `context_load` warns when a domain has no triggers configured
-- All 10 domains now have descriptions and trigger keywords
-
-**User Preferences addition**:
-```
-# Domain Awareness
-
-When working with Super Claude domains:
-- If a domain lacks trigger keywords when loaded, point it out and offer to add some
-- If we've been discussing a topic for several turns that doesn't match any existing domain, ask if it's something worth creating a domain for
-- Don't be pushy about domain creation - one gentle offer is enough
-```
-
-**Result**: User said "I was thinking of revising my 90 day plan for my new role as director of technology" and Claude automatically loaded burrillville domain + the 90-day plan context file. Friction-free.

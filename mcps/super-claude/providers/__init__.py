@@ -5,7 +5,7 @@ Provider implementations for the storage interface.
 """
 
 from .gdrive import GoogleDriveProvider
-from .supernote import SupernoteProvider
+from .supernote_provider import SupernoteProvider
 
 __all__ = [
     "GoogleDriveProvider",
