@@ -1,5 +1,5 @@
 {
-  "version": "0.6.2",
+  "version": "0.6.3",
   "lastSession": "2026-01-17",
   "status": "active",
   "endpoints": {
@@ -20,6 +20,6 @@
     "storage": "active",
     "supernote": "active"
   },
-  "active_work": "Supernote plugin ready for testing. Next: test with actual folder structure, then .note conversion.",
-  "last_session_summary": "Built Supernote plugin using storage abstraction. Established per-domain plugin directory convention. Updated all docs and committed."
+  "active_work": "Code audit in progress. Published file auth fixed (direct access now public, listing still protected).",
+  "last_session_summary": "Fixed published file 403 errors by splitting nginx location blocks. Direct file URLs now work in browser."
 }

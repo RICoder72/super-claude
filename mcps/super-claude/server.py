@@ -951,6 +951,51 @@ if PLUGINS_AVAILABLE and 'supernote' in plugin_loader.loaded_plugins:
         """
         return await _supernote.supernote_list_remote(domain, path_type)
 
+    @mcp.tool()
+    async def supernote_list_notes(domain: str) -> str:
+        """
+        List available notes for a domain with their page counts.
+        
+        Args:
+            domain: Domain name
+        
+        Returns:
+            List of notes and their converted pages
+        """
+        return await _supernote.supernote_list_notes(domain)
+    
+    @mcp.tool()
+    async def supernote_read_note(domain: str, note_stem: str):
+        """
+        Read all pages of a Supernote note as images.
+        
+        This returns the converted PNG pages as images that Claude can see
+        and interpret using vision. Use this to extract content from handwritten notes.
+        
+        Args:
+            domain: Domain name
+            note_stem: Note filename without extension (e.g., "20260116_140203")
+        
+        Returns:
+            List of Image objects (one per page) that Claude can see
+        """
+        return await _supernote.supernote_read_note(domain, note_stem)
+    
+    @mcp.tool()
+    async def supernote_read_page(domain: str, note_stem: str, page: int = 0):
+        """
+        Read a single page of a Supernote note as an image.
+        
+        Args:
+            domain: Domain name
+            note_stem: Note filename without extension (e.g., "20260116_140203")
+            page: Page number (0-indexed)
+        
+        Returns:
+            Image object that Claude can see
+        """
+        return await _supernote.supernote_read_page(domain, note_stem, page)
+
 # MAIN
 # =============================================================================
 if __name__ == "__main__":

@@ -2,6 +2,32 @@
 
 ## 2026-01-17
 
+### Session 5: Published File Auth Fix
+
+**What**: Fixed 403 errors when accessing published files via browser.
+
+**Problem**: Published file URLs (e.g., `zanni.synology.me/super-claude-output/file.png`) returned 403 Forbidden because nginx required bearer token auth for the entire `/super-claude-output/` location. Browsers don't send bearer tokens on link clicks.
+
+**Solution**: Split nginx config into two location blocks:
+- `location = /super-claude-output/` (exact match) — directory listing requires auth
+- `location /super-claude-output/` (prefix match) — direct file access is public
+
+**Rationale**: URLs are unguessable (you only get them from Claude), content is user-generated, and this is personal infrastructure. Acceptable security tradeoff for immediate usability. Future: cookie-based auth for proper browser sessions.
+
+**Changes**:
+- Updated `router/nginx-auth.conf`:
+  - Split `/super-claude-output/` into two location blocks
+  - Added MIME types for images (png, jpg, gif) and PDF
+  - Directory listing still protected, direct file access public
+- Updated `domains/super-claude/context/todo.md`:
+  - Added "User Profile" item — global `profile.md` for user context
+  - Marked basic published file access as complete
+  - Added future item: cookie-based auth with browser login flow
+
+**Result**: `https://zanni.synology.me/super-claude-output/somefile.png` now loads in browser without auth. Enables sharing Supernote images without burning Claude's vision token quota.
+
+---
+
 ### Session 4: Supernote Image Reading Tools
 
 **What**: Added tools for Claude to read Supernote pages via vision, fixing conversation cutoffs caused by base64 text transfer.

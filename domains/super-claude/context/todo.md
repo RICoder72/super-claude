@@ -17,6 +17,14 @@
 
 ## Next Up
 
+### User Profile
+- [ ] **Global user profile**: A `profile.md` or similar in Super Claude root with info about Matthew
+  - Background, preferences, working style, current context
+  - Loaded automatically on session_start (or available via tool)
+  - Supplements Claude.ai memory with Super Claude-specific context
+  - Could include: communication preferences, project context, technical background, current priorities
+  - Consider: should this be editable via tool? Or just a file Claude can read?
+
 ### Plugin System Improvements
 - [ ] **Hot loading**: New plugins should be detected and loaded without restart
 - [ ] **Hot reloading**: Changed plugin code should take effect without restart
@@ -26,9 +34,15 @@
   - Consider file watcher for auto-reload during development
 
 ### Publishing / Web Output
-- [ ] **Auth for published files**: Currently returns 403 forbidden
-  - Need to either: add auth to nginx for /super-claude-output, or make outputs truly public, or provide signed URLs
-  - Consider: should publish tool return a way to view in-chat instead of/in addition to URL?
+- [x] **Basic published file access**: Direct file URLs now work without auth (2026-01-17)
+  - Directory listing (`/super-claude-output/`) still requires bearer token
+  - Direct file access (`/super-claude-output/myfile.png`) is public
+  - URLs are unguessable; acceptable for personal infra
+- [ ] **Cookie-based auth for published files**: Proper auth with browser session
+  - Add OAuth login flow that sets browser cookie
+  - Update nginx to accept cookie OR bearer token
+  - One-time browser login, then all published URLs work seamlessly
+  - Consider: shared cookie with auth-service, or separate "viewer" auth?
 - [ ] **In-chat file delivery**: Way to get published files into Claude chat directly (base64? copy to claude.ai uploads?)
 
 ### Supernote Polish
