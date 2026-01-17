@@ -2,6 +2,39 @@
 
 ## 2026-01-17
 
+### Session 4: Supernote Image Reading Tools
+
+**What**: Added tools for Claude to read Supernote pages via vision, fixing conversation cutoffs caused by base64 text transfer.
+
+**Problem discovered**: Previous sessions were getting cut off mid-processing when reading notes. Root cause: transferring images via base64 text through shell commands was hitting response limits (hundreds of KB per image × multiple pages = megabytes of text in tool responses).
+
+**Solution**: Use MCP's native image content type instead of base64 text.
+
+**Changes** (v0.5.0):
+- Added `supernote_read_note(domain, note_stem)` - returns all pages as MCP ImageContent
+- Added `supernote_read_page(domain, note_stem, page)` - returns single page as ImageContent  
+- Added `supernote_list_notes(domain)` - lists available notes with page counts
+- Integrated `supernote-tool convert` into `supernote_pull` (was manual before)
+- Added `processed/` directory to plugin structure (for future use)
+
+**Technical details**:
+- FastMCP provides `Image` helper class at `fastmcp.utilities.types.Image`
+- Returning `Image(path="/path/to/file.png")` gets converted to `ImageContent` automatically
+- Images go through MCP's native image handling, not text context
+- This is much more efficient than base64 text transfer
+
+**Workflow now**:
+```
+1. supernote_pull(domain)     → Downloads and converts to PNG
+2. supernote_list_notes(domain) → Shows available notes
+3. supernote_read_note(domain, stem) → Claude sees images via vision
+4. Claude extracts and processes content
+```
+
+**Note**: New tools require a new conversation to appear in tool list (client-side schema caching). Tested via Python direct calls - all working.
+
+---
+
 ### Session 3: Supernote Conversion & Path Fixes
 
 **What**: Completed Supernote plugin with .note → PNG conversion and fixed path handling for non-root sync folders.

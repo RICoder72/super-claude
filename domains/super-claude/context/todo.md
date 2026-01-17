@@ -10,6 +10,7 @@
 - [x] Local folder structure (notes/, documents/, converted/)
 - [x] .note → PNG conversion via supernotelib
 - [x] base_path config for non-root Supernote sync folders
+- [ ] Note processing workflow (extract → markdown → move to processed)
 - [ ] Test push direction (documents to Supernote)
 
 ---
@@ -36,6 +37,11 @@
 - [ ] **Incremental pull**: Only download new/changed files
 
 ### Domain System Improvements
+- [ ] **Domain-specific instructions**: Like project instructions in Claude Projects
+  - Each domain could have an `instructions.md` that gets injected when domain is loaded
+  - Could customize Claude's behavior, tone, focus areas per domain
+  - Example: burrillville domain might include "always consider CJIS compliance for police-related items"
+  - Example: gaming domain might include "be casual, use gaming terminology"
 - [ ] **Cross-domain search**: `context_search` tool to find relevant info across all domains
 - [ ] **Domain creation prompt**: Offer to create a domain when none detected after several turns
 - [ ] **Domain templates**: Streamline new domain creation with scaffolding command
