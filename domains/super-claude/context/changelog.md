@@ -1,5 +1,82 @@
 # Changelog
 
+## 2026-01-18
+
+### Session 7: Secrets Architecture Discussion & Service Testing
+
+**What**: Discussed and clarified the two-layer secrets architecture, tested all services, and fixed issues.
+
+**Architecture Clarification**:
+
+Established clear separation between two types of secrets management:
+
+1. **Infrastructure Secrets (Core)** — Internal plumbing, not exposed as MCP tools
+   - Location: `/data/mcps/super-claude/core/secrets/`
+   - Purpose: Adapters use this to get their OAuth tokens, API keys, etc.
+   - Not account-based — just works as a singleton with configurable backends
+   - Backends: 1Password (implemented), Bitwarden/LastPass/local (future)
+   - Config: `/data/config/secrets_backends.json`
+
+2. **Secrets Service (User-facing)** — Account-based, for YOUR passwords (NOT YET BUILT)
+   - Would live at: `/app/services/secrets/`
+   - Purpose: Store firewall logins, vendor credentials, etc. as domain data
+   - Account-based like mail/storage/calendar ("work-passwords", "personal-passwords")
+   - Domain-configurable defaults
+   - Would use infrastructure secrets to authenticate to its own backends
+
+**Key insight**: These are functionally different despite using similar technology. Infrastructure secrets are plumbing; user-facing secrets are data.
+
+**Testing Results**:
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Core Secrets Infrastructure | ✅ | `auth_get`, `auth_set`, `auth_get_ref` all work |
+| op_auth Plugin | ✅ | Thin wrapper over core secrets |
+| Mail Service (Gmail) | ✅ | Configurable token path working |
+| Calendar Service (GCal) | ✅ | Configurable token path working |
+| Storage Service (GDrive) | ✅ | Configurable token path working |
+| Supernote Plugin | ✅ | Fixed missing method references |
+
+**Changes Made**:
+
+1. **Made Google adapters use configurable token paths**:
+   - Gmail, GCal, GDrive adapters now read `token_path` from account config
+   - Falls back to default paths (`/data/config/{service}_token.json`) for backward compatibility
+   - Enables future multi-account support (different token files per account)
+
+2. **Fixed Supernote plugin**:
+   - Removed references to unimplemented `supernote_mark_processed` and `supernote_unprocess` methods
+   - Plugin now loads successfully with 8 working tools
+   - Added TODO comment for future implementation
+
+**Files Changed**:
+- `services/mail/adapters/gmail.py` — configurable token_path
+- `services/storage/adapters/gdrive.py` — configurable token_path
+- `services/calendar/adapters/gcal.py` — configurable token_path
+- `plugins/supernote.py` — removed unimplemented tool references
+
+**Domain Defaults Discussion** (not yet implemented):
+
+Discussed how domains should specify default accounts for services:
+```json
+{
+  "service_defaults": {
+    "mail": "work-gmail",
+    "storage": "personal-gdrive",
+    "calendar": "work-gcal"
+  }
+}
+```
+
+This would allow "work on my job" to auto-select work email, while "check personal email" without a domain would require explicit account specification.
+
+**Not completed this session**:
+- User-facing Secrets Service (deferred)
+- Domain default account configuration (discussed but not implemented)
+- `supernote_mark_processed` and `supernote_unprocess` implementations
+
+---
+
 ## 2026-01-17
 
 ### Session 6: Code Audit & Refactoring

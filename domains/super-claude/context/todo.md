@@ -10,12 +10,35 @@
 - [x] Local folder structure (notes/, documents/, converted/)
 - [x] .note → PNG conversion via supernotelib
 - [x] base_path config for non-root Supernote sync folders
-- [x] Note processing workflow (mark_processed moves notes to processed/)
+- [x] Fixed missing method references (removed supernote_mark_processed/unprocess from registration)
+- [ ] Implement supernote_mark_processed and supernote_unprocess tools
 - [ ] Test push direction (documents to Supernote)
 
 ---
 
 ## Next Up
+
+### Domain Default Accounts
+- [ ] **Service defaults per domain**: Domain config specifies which account to use for each service
+  ```json
+  {
+    "service_defaults": {
+      "mail": "work-gmail",
+      "storage": "personal-gdrive", 
+      "calendar": "work-gcal"
+    }
+  }
+  ```
+- [ ] **Tool fallback logic**: If account not specified, check domain defaults, then require explicit
+- [ ] **Global defaults**: Optional system-wide defaults for no-domain usage
+
+### User-Facing Secrets Service
+- [ ] **Secrets Service** (`/app/services/secrets/`): Account-based, for storing YOUR passwords
+  - Different from infrastructure secrets (which is plumbing)
+  - Accounts like "work-passwords", "personal-passwords"
+  - Domain-configurable defaults
+  - Uses infrastructure secrets to authenticate to its own backends
+  - Use cases: firewall logins, vendor credentials, system passwords
 
 ### User Profile
 - [ ] **Global user profile**: A `profile.md` or similar in Super Claude root with info about Matthew
@@ -66,6 +89,10 @@
 ---
 
 ## Backlog
+
+### Core Services
+- [x] **Configurable token paths**: Google adapters now read token_path from account config (2026-01-18)
+- [ ] **Multi-account Google**: Test with multiple Gmail/GDrive/GCal accounts using different token files
 
 ### Cloud Storage Providers
 - [ ] OneDrive provider

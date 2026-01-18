@@ -54,6 +54,75 @@
 
 ---
 
+## Core Services
+
+Core Services provide platform-agnostic access to external capabilities. Each service defines an interface (ABC), and adapters implement that interface for specific platforms. Users configure named accounts that reference adapters and credentials.
+
+See [architecture.md](architecture.md) for the full Core Services architecture.
+
+### Storage Service
+
+Cloud storage abstraction for file operations.
+
+| Tool | Description |
+|------|-------------|
+| `storage_list_accounts` | Show configured storage accounts |
+| `storage_add_account` | Add new storage account |
+| `storage_remove_account` | Remove storage account |
+| `storage_list_files` | List files in account |
+| `storage_download` | Download file from cloud |
+| `storage_upload` | Upload file to cloud |
+
+**Adapters:** GDrive (active), OneDrive (planned), Dropbox (planned)
+
+**Interface:** `StorageAdapter` ABC with: `connect`, `disconnect`, `upload`, `download`, `list_files`, `exists`, `delete`, `mkdir`, `get_info`
+
+### Mail Service
+
+Email operations across providers.
+
+| Tool | Description |
+|------|-------------|
+| `mail_list_accounts` | Show configured mail accounts |
+| `mail_add_account` | Add new mail account |
+| `mail_remove_account` | Remove mail account |
+| `mail_list_folders` | List mailbox folders |
+| `mail_list_messages` | List messages in folder (with filters) |
+| `mail_get_message` | Get full message with body/attachments |
+| `mail_send` | Send new message |
+| `mail_reply` | Reply to message |
+| `mail_forward` | Forward message |
+| `mail_move` | Move message to folder |
+| `mail_delete` | Delete message |
+| `mail_search` | Search messages |
+
+**Adapters:** Gmail (planned), Outlook (planned), IMAP (planned)
+
+**Interface:** `MailAdapter` ABC with: `connect`, `disconnect`, `list_folders`, `list_messages`, `get_message`, `send`, `reply`, `forward`, `move`, `delete`, `search`
+
+### Calendar Service
+
+Calendar operations across providers.
+
+| Tool | Description |
+|------|-------------|
+| `calendar_list_accounts` | Show configured calendar accounts |
+| `calendar_add_account` | Add new calendar account |
+| `calendar_remove_account` | Remove calendar account |
+| `calendar_list_calendars` | List available calendars |
+| `calendar_list_events` | List events (with date range) |
+| `calendar_get_event` | Get full event details |
+| `calendar_create_event` | Create new event |
+| `calendar_update_event` | Update existing event |
+| `calendar_delete_event` | Delete event |
+| `calendar_find_free_time` | Find available time slots |
+
+**Adapters:** GCal (planned), OutlookCal (planned), CalDAV (planned)
+
+**Interface:** `CalendarAdapter` ABC with: `connect`, `disconnect`, `list_calendars`, `list_events`, `get_event`, `create_event`, `update_event`, `delete_event`, `find_free_time`
+
+---
+
 ## Plugin System
 
 Plugins extend Super Claude with additional capabilities. Located in `/data/mcps/super-claude/plugins/`.
@@ -65,36 +134,20 @@ Plugins extend Super Claude with additional capabilities. Located in `/data/mcps
 | `auth_get_ref` | Retrieve secret using full 1Password reference URI |
 | `auth_set` | Create new item in 1Password |
 
-### storage (Cloud Storage Abstraction)
-| Tool | Description |
-|------|-------------|
-| `storage_list_accounts` | Show configured storage accounts |
-| `storage_add_account` | Add new storage account |
-| `storage_remove_account` | Remove storage account |
-| `storage_list_files` | List files in account |
-| `storage_download` | Download file from cloud |
-| `storage_upload` | Upload file to cloud |
-
-**Supported providers**: Google Drive (active), OneDrive (planned), Dropbox (planned)
-
-**Account system**: Named accounts (e.g., "personal", "work") abstract away provider details. Plugins reference accounts by name.
-
 ### supernote (Domain Sync)
 
-Syncs files between Super Claude domains and Supernote devices via cloud storage. Does NOT talk to Supernote directly — uses the storage abstraction layer to sync with whatever cloud provider the Supernote device syncs to.
+Syncs files between Super Claude domains and Supernote devices via cloud storage. Uses the Storage Service rather than talking to Supernote directly.
 
 | Tool | Description |
 |------|-------------|
 | `supernote_setup` | Configure sync for a domain (account, subfolder, options) |
 | `supernote_status` | Show sync config and local file counts |
 | `supernote_list_remote` | List files in remote Note/ or Document/ folder |
+| `supernote_list_notes` | List available notes with page counts |
+| `supernote_read_note` | Read all pages of a note as images |
+| `supernote_read_page` | Read single page of a note as image |
 | `supernote_pull` | Download .note files from cloud to domain |
 | `supernote_push` | Upload documents from domain to cloud |
-
-**Architecture**:
-```
-Supernote Device → (auto-sync) → Cloud Storage ← (storage_* tools) ← Super Claude
-```
 
 **Per-domain config** (`domains/{name}/plugins/supernote/config.json`):
 ```json
@@ -105,15 +158,6 @@ Supernote Device → (auto-sync) → Cloud Storage ← (storage_* tools) ← Sup
   "sync_documents": true,
   "convert_to": ["pdf", "png"]
 }
-```
-
-**Local folder structure**:
-```
-domains/{name}/plugins/supernote/
-├── config.json    # Sync configuration
-├── notes/         # .note files pulled from device
-├── documents/     # Files to push to device
-└── converted/     # PDF/PNG conversions (local only)
 ```
 
 ---

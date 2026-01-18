@@ -1,6 +1,6 @@
 {
   "version": "0.7.0",
-  "lastSession": "2026-01-17",
+  "lastSession": "2026-01-18",
   "status": "active",
   "endpoints": {
     "main": "https://zanni.synology.me/mcp",
@@ -17,9 +17,8 @@
   },
   "plugins": {
     "op_auth": "active",
-    "storage": "active",
     "supernote": "active"
   },
-  "active_work": "Refactoring complete. Shared modules created (config.py, shell.py). Ready for container rebuild to test.",
-  "last_session_summary": "Code audit and refactoring - created shared modules, added shell command blocklist, fixed code duplication."
+  "active_work": "Domain service defaults and user-facing secrets service not yet implemented. All core services tested and working.",
+  "last_session_summary": "Clarified two-layer secrets architecture (infrastructure vs user-facing). Tested all services (mail, calendar, storage, supernote). Made Google adapters use configurable token paths. Fixed supernote plugin missing methods."
 }
