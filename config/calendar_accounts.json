@@ -1,0 +1,9 @@
+{
+  "accounts": {
+    "personal": {
+      "adapter": "gcal",
+      "credentials_ref": "",
+      "config": {}
+    }
+  }
+}

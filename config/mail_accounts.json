@@ -1,0 +1,9 @@
+{
+  "accounts": {
+    "personal": {
+      "adapter": "gmail",
+      "credentials_ref": "",
+      "config": {}
+    }
+  }
+}
