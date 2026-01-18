@@ -76,8 +76,7 @@ class SupernotePlugin(SuperClaudePlugin):
             "supernote_list_notes": self.supernote_list_notes,
             "supernote_read_note": self.supernote_read_note,
             "supernote_read_page": self.supernote_read_page,
-            "supernote_mark_processed": self.supernote_mark_processed,
-            "supernote_unprocess": self.supernote_unprocess,
+            # TODO: implement supernote_mark_processed and supernote_unprocess
         }
     
     def _get_storage_manager(self):
