@@ -35,9 +35,15 @@
 | Tool | Description |
 |------|-------------|
 | `context_list` | Show all domains with descriptions and trigger keywords |
-| `context_load` | Load a domain's main markdown file |
+| `context_load` | Load a domain's main markdown file + INSTRUCTIONS.md if present |
 | `context_get` | Get specific file from domain's context/ folder |
 | `context_update` | Update key-value in domain's state.json |
+| `instructions_get` | Get instructions for a domain (or global if empty string) |
+| `instructions_set` | Set instructions for a domain (or global if empty string) |
+
+**Instructions auto-loading:**
+- `session_start()` loads global `/data/INSTRUCTIONS.md`
+- `context_load(domain)` loads `domains/{domain}/INSTRUCTIONS.md` if it exists
 
 ### Publishing
 | Tool | Description |
