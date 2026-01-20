@@ -30,6 +30,18 @@ A Docker-based MCP server running on Matthew's Synology NAS that provides:
 | Load domain | `context_load("domain-name")` |
 | Publish file | `publish("path/to/file")` |
 | List storage | `storage_list_files("account", "/path")` |
+| View instructions | `instructions_get("domain")` or `instructions_get("")` for global |
+| Set instructions | `instructions_set("content", "domain")` |
+
+## Instructions System
+
+**Auto-loaded:**
+- `session_start()` loads `/data/INSTRUCTIONS.md` (global working style)
+- `context_load(domain)` loads `domains/{domain}/INSTRUCTIONS.md` if present
+
+**Use instructions for:** Behavioral guidance that should apply every time a domain is loaded (e.g., "always check Supernote first for meeting notes", "use tracer bullet approach").
+
+**Don't use for:** Reference information (put in context files) or ephemeral state (put in state.json).
 
 ## Session Protocol
 
