@@ -1,6 +1,6 @@
 {
-  "version": "0.7.0",
-  "lastSession": "2026-01-18",
+  "version": "0.7.1",
+  "lastSession": "2026-01-20",
   "status": "active",
   "endpoints": {
     "main": "https://zanni.synology.me/mcp",
@@ -17,8 +17,9 @@
   },
   "plugins": {
     "op_auth": "active",
-    "supernote": "active"
+    "supernote": "active",
+    "user_secrets": "active"
   },
-  "active_work": "Domain service defaults and user-facing secrets service not yet implemented. All core services tested and working.",
-  "last_session_summary": "Clarified two-layer secrets architecture (infrastructure vs user-facing). Tested all services (mail, calendar, storage, supernote). Made Google adapters use configurable token paths. Fixed supernote plugin missing methods."
+  "active_work": "Instructions system now implemented. Next: domain service defaults, cross-domain search.",
+  "last_session_summary": "Implemented instructions system (was marked complete but never built). Added instructions_get/set tools. Global and domain INSTRUCTIONS.md now loaded automatically."
 }

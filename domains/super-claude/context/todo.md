@@ -74,9 +74,9 @@
 - [ ] **Incremental pull**: Only download new/changed files
 
 ### Domain System Improvements
-- [x] **Domain-specific instructions**: INSTRUCTIONS.md loaded with context_load (2026-01-17)
-- [x] **Global instructions**: INSTRUCTIONS.md at root loaded with session_start (2026-01-17)
-- [x] **instructions_get/set tools**: View and update instructions via tools (2026-01-17)
+- [x] **Domain-specific instructions**: INSTRUCTIONS.md loaded with context_load (2026-01-20)
+- [x] **Global instructions**: INSTRUCTIONS.md at root loaded with session_start (2026-01-20)
+- [x] **instructions_get/set tools**: View and update instructions via tools (2026-01-20)
 - [ ] **Cross-domain search**: `context_search` tool to find relevant info across all domains
 - [ ] **Domain creation prompt**: Offer to create a domain when none detected after several turns
 - [ ] **Domain templates**: Streamline new domain creation with scaffolding command

@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-01-20
+
+### Session 8: Instructions System Implementation
+
+**What**: Actually implemented the instructions system that was marked complete but never built.
+
+**Problem discovered**: The todo.md had marked these items complete on 2026-01-17:
+- Domain-specific instructions (INSTRUCTIONS.md loaded with context_load)
+- Global instructions (INSTRUCTIONS.md at root loaded with session_start)
+- instructions_get/set tools
+
+However, examining the code revealed none of this was actually implemented. The `INSTRUCTIONS.md` files existed but nothing loaded them.
+
+**Changes made**:
+
+1. **`session_start()` now loads global instructions**:
+   - Reads `/data/INSTRUCTIONS.md` if it exists
+   - Appends content at end of session start output under "📋 Global Instructions" header
+   - Uses `_load_global_instructions()` helper (was already in code but not called)
+
+2. **`_context_load_impl()` now loads domain instructions**:
+   - After loading `{domain}.md`, checks for `INSTRUCTIONS.md` in domain root
+   - Appends content under "📋 Domain Instructions" header if present
+   - Silently skips if file doesn't exist or can't be read
+
+3. **Added `instructions_get(domain)` tool**:
+   - Pass domain name to get domain-specific instructions
+   - Pass empty string to get global instructions
+   - Returns formatted content or helpful message if not found
+
+4. **Added `instructions_set(content, domain)` tool**:
+   - Pass domain name to set domain-specific instructions
+   - Pass empty string to set global instructions
+   - Creates/overwrites INSTRUCTIONS.md file
+
+**Files changed**:
+- `mcps/super-claude/server.py` — added domain instructions to context_load, added two new tools
+
+**Existing INSTRUCTIONS.md files**:
+- `/data/INSTRUCTIONS.md` — global working style preferences
+- `/data/domains/burrillville/INSTRUCTIONS.md` — Supernote workflow instructions
+
+**Result**: Instructions are now actually loaded when starting sessions and loading domains. Tools allow viewing/editing instructions without manually editing files.
+
+---
+
 ## 2026-01-18
 
 ### Session 7: Secrets Architecture Discussion & Service Testing

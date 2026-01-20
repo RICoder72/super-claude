@@ -105,6 +105,56 @@ except ImportError as e:
     STORAGE_AVAILABLE = False
 
 # =============================================================================
+# MAIL SERVICE INITIALIZATION
+# =============================================================================
+SERVICES_DIR = SUPER_CLAUDE_ROOT / "mcps" / "super-claude" / "services"
+if str(SERVICES_DIR) not in sys.path:
+    sys.path.insert(0, str(SERVICES_DIR))
+
+try:
+    from mail.manager import MailManager
+    from mail.adapters.gmail import GmailAdapter
+    mail_manager = MailManager()
+    mail_manager.register_adapter_type("gmail", GmailAdapter)
+    MAIL_AVAILABLE = True
+    logger.info("Mail service initialized")
+except ImportError as e:
+    logger.warning(f"Mail service unavailable: {e}")
+    mail_manager = None
+    MAIL_AVAILABLE = False
+
+# =============================================================================
+# CALENDAR SERVICE INITIALIZATION
+# =============================================================================
+try:
+    from calendarservice.manager import CalendarManager
+    from calendarservice.adapters.gcal import GCalAdapter
+    calendar_manager = CalendarManager()
+    calendar_manager.register_adapter_type("gcal", GCalAdapter)
+    CALENDAR_AVAILABLE = True
+    logger.info("Calendar service initialized")
+except ImportError as e:
+    logger.warning(f"Calendar service unavailable: {e}")
+    calendar_manager = None
+    CALENDAR_AVAILABLE = False
+
+# =============================================================================
+# CONTACTS SERVICE INITIALIZATION
+# =============================================================================
+try:
+    from contacts.manager import ContactsManager
+    from contacts.adapters.gcontacts import GoogleContactsAdapter
+    contacts_manager = ContactsManager()
+    contacts_manager.register_adapter_type("gcontacts", GoogleContactsAdapter)
+    CONTACTS_AVAILABLE = True
+    logger.info("Contacts service initialized")
+except ImportError as e:
+    logger.warning(f"Contacts service unavailable: {e}")
+    contacts_manager = None
+    CONTACTS_AVAILABLE = False
+
+
+# =============================================================================
 # DOMAIN CONFIG
 # =============================================================================
 def _load_domain_config() -> dict:
@@ -195,6 +245,17 @@ def _detect_domain(text: str) -> str | None:
                 return domain
     return None
 
+
+def _load_global_instructions() -> str | None:
+    """Load global INSTRUCTIONS.md if it exists. Returns content or None."""
+    instructions_file = SUPER_CLAUDE_ROOT / "INSTRUCTIONS.md"
+    if instructions_file.exists():
+        try:
+            return instructions_file.read_text().strip()
+        except Exception as e:
+            logger.warning(f"Failed to load global instructions: {e}")
+    return None
+
 def _get_available_domains() -> list[dict]:
     """Get list of available domains with their descriptions."""
     if not DOMAINS_DIR.exists():
@@ -271,7 +332,19 @@ def _context_load_impl(domain: str) -> str:
         if not triggers:
             trigger_note = f"\n\n💡 **Note:** This domain has no auto-detection triggers. Want to add some keywords so I can recognize when we're discussing {domain}?"
         
-        return f"📖 Loaded domain: {domain}\n\n{file_content}{trigger_note}"
+        result = f"📖 Loaded domain: {domain}\n\n{file_content}{trigger_note}"
+        
+        # Load domain-specific instructions if they exist
+        instructions_file = domain_path / "INSTRUCTIONS.md"
+        if instructions_file.exists():
+            try:
+                instructions_content = instructions_file.read_text().strip()
+                if instructions_content:
+                    result += "\n\n📋 Domain Instructions\n" + "─" * 30 + "\n" + instructions_content
+            except Exception:
+                pass  # Silently skip if we can't read instructions
+        
+        return result
     except Exception as e:
         return f"❌ Error loading context: {e}"
 
@@ -325,6 +398,14 @@ def session_start(user_message: str = "") -> str:
         lines.append("   • Projects, tasks, backlog")
         lines.append("   • Or any registered domain")
     
+    
+    # Global instructions
+    global_instructions = _load_global_instructions()
+    if global_instructions:
+        lines.append("")
+        lines.append("📋 Global Instructions")
+        lines.append("─" * 30)
+        lines.append(global_instructions)
     return "\n".join(lines)
 
 @mcp.tool()
@@ -481,6 +562,61 @@ def context_update(domain: str, key: str, value: str) -> str:
         return f"✅ Updated {domain} state: {key} = {parsed_value}"
     except Exception as e:
         return f"❌ Error updating state: {e}"
+
+@mcp.tool()
+def instructions_get(domain: str = "") -> str:
+    """
+    Get instructions for a domain or global instructions.
+    
+    Args:
+        domain: Domain name, or empty string for global instructions
+    
+    Returns:
+        The contents of INSTRUCTIONS.md (domain-specific or global)
+    """
+    if domain:
+        instructions_file = _get_domain_path(domain) / "INSTRUCTIONS.md"
+        label = f"Domain '{domain}'"
+    else:
+        instructions_file = SUPER_CLAUDE_ROOT / "INSTRUCTIONS.md"
+        label = "Global"
+    
+    if not instructions_file.exists():
+        return f"📋 No {label.lower()} instructions found. Use instructions_set to create them."
+    
+    try:
+        content = instructions_file.read_text().strip()
+        return f"📋 {label} Instructions\n{'─' * 30}\n{content}"
+    except Exception as e:
+        return f"❌ Error reading instructions: {e}"
+
+@mcp.tool()
+def instructions_set(content: str, domain: str = "") -> str:
+    """
+    Set instructions for a domain or global instructions.
+    
+    Args:
+        content: The instruction content (markdown)
+        domain: Domain name, or empty string for global instructions
+    
+    Returns:
+        Confirmation message
+    """
+    if domain:
+        domain_path = _get_domain_path(domain)
+        if not domain_path.exists():
+            return f"❌ Domain '{domain}' does not exist"
+        instructions_file = domain_path / "INSTRUCTIONS.md"
+        label = f"domain '{domain}'"
+    else:
+        instructions_file = SUPER_CLAUDE_ROOT / "INSTRUCTIONS.md"
+        label = "global"
+    
+    try:
+        instructions_file.write_text(content.strip() + "\n")
+        return f"✅ Updated {label} instructions ({len(content)} bytes)"
+    except Exception as e:
+        return f"❌ Error writing instructions: {e}"
 
 @mcp.tool()
 def context_list() -> str:
@@ -870,6 +1006,414 @@ if STORAGE_AVAILABLE:
         """Download a file from cloud storage."""
         local = _validate_path(local_path)
         return await storage_manager.download(account, remote_path, local)
+
+
+# =============================================================================
+# MAIL TOOLS
+# =============================================================================
+if MAIL_AVAILABLE:
+    @mcp.tool()
+    def mail_list_accounts() -> str:
+        """List all configured mail accounts."""
+        return mail_manager.list_accounts()
+    
+    @mcp.tool()
+    def mail_add_account(
+        name: str,
+        adapter: str,
+        credentials_ref: str = "",
+        config: str = "{}"
+    ) -> str:
+        """Add a new mail account."""
+        try:
+            config_dict = json.loads(config) if config else {}
+            return mail_manager.add_account(name, adapter, credentials_ref, config_dict)
+        except json.JSONDecodeError as e:
+            return f"Invalid config JSON: {e}"
+    
+    @mcp.tool()
+    def mail_remove_account(name: str) -> str:
+        """Remove a mail account."""
+        return mail_manager.remove_account(name)
+    
+    @mcp.tool()
+    async def mail_list_folders(account: str) -> str:
+        """List mailbox folders."""
+        folders = await mail_manager.list_folders(account)
+        if not folders:
+            return f"No folders found or could not connect to {account}"
+        lines = [f"📁 Folders in {account}", "─" * 40]
+        for f in folders:
+            unread = f" ({f.unread_count} unread)" if f.unread_count else ""
+            lines.append(f"  {f.name}{unread}")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def mail_list_messages(
+        account: str,
+        folder: str = "INBOX",
+        limit: int = 20,
+        unread_only: bool = False
+    ) -> str:
+        """List messages in a folder."""
+        page = await mail_manager.list_messages(account, folder, limit, unread_only=unread_only)
+        if not page.messages:
+            return f"No messages in {folder}"
+        lines = [f"📧 Messages in {account}/{folder}", "─" * 40]
+        for m in page.messages:
+            date_str = m.date.strftime("%m/%d %H:%M") if m.date else ""
+            unread = "●" if any(f.value == "unread" for f in m.flags) else " "
+            lines.append(f"{unread} {date_str} | {m.sender.email[:25]:<25} | {m.subject[:40]}")
+            lines.append(f"    ID: {m.id}")
+        if page.next_cursor:
+            lines.append(f"\n(more messages available)")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def mail_get_message(account: str, message_id: str) -> str:
+        """Get full message with body."""
+        msg = await mail_manager.get_message(account, message_id)
+        if not msg:
+            return f"Message not found: {message_id}"
+        lines = [
+            f"📧 Message: {msg.subject}",
+            "─" * 40,
+            f"From: {msg.sender}",
+            f"To: {', '.join(str(r) for r in msg.recipients)}",
+            f"Date: {msg.date}",
+        ]
+        if msg.cc:
+            lines.append(f"CC: {', '.join(str(r) for r in msg.cc)}")
+        if msg.attachments:
+            lines.append(f"Attachments: {len(msg.attachments)}")
+        lines.append("")
+        lines.append(msg.body_text or msg.body_html or "(no body)")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def mail_search(account: str, query: str, limit: int = 20) -> str:
+        """Search messages."""
+        page = await mail_manager.search(account, query, limit=limit)
+        if not page.messages:
+            return f"No messages matching: {query}"
+        lines = [f"🔍 Search: {query}", "─" * 40]
+        for m in page.messages:
+            date_str = m.date.strftime("%m/%d") if m.date else ""
+            lines.append(f"{date_str} | {m.sender.email[:20]} | {m.subject[:35]}")
+            lines.append(f"    ID: {m.id}")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def mail_send(
+        account: str,
+        to: str,
+        subject: str,
+        body: str,
+        cc: str = "",
+        html: bool = False
+    ) -> str:
+        """Send an email."""
+        to_list = [t.strip() for t in to.split(",") if t.strip()]
+        cc_list = [c.strip() for c in cc.split(",") if c.strip()] if cc else None
+        return await mail_manager.send(account, to_list, subject, body, cc=cc_list, html=html)
+    
+    @mcp.tool()
+    async def mail_delete(account: str, message_id: str, permanent: bool = False) -> str:
+        """Delete a message (moves to trash by default)."""
+        return await mail_manager.delete(account, message_id, permanent)
+    
+    @mcp.tool()
+    async def mail_mark_read(account: str, message_id: str, read: bool = True) -> str:
+        """Mark message as read or unread."""
+        return await mail_manager.mark_read(account, message_id, read)
+
+# =============================================================================
+# CALENDAR TOOLS
+# =============================================================================
+if CALENDAR_AVAILABLE:
+    @mcp.tool()
+    def calendar_list_accounts() -> str:
+        """List all configured calendar accounts."""
+        return calendar_manager.list_accounts()
+    
+    @mcp.tool()
+    def calendar_add_account(
+        name: str,
+        adapter: str,
+        credentials_ref: str = "",
+        config: str = "{}"
+    ) -> str:
+        """Add a new calendar account."""
+        try:
+            config_dict = json.loads(config) if config else {}
+            return calendar_manager.add_account(name, adapter, credentials_ref, config_dict)
+        except json.JSONDecodeError as e:
+            return f"Invalid config JSON: {e}"
+    
+    @mcp.tool()
+    def calendar_remove_account(name: str) -> str:
+        """Remove a calendar account."""
+        return calendar_manager.remove_account(name)
+    
+    @mcp.tool()
+    async def calendar_list_calendars(account: str) -> str:
+        """List available calendars."""
+        calendars = await calendar_manager.list_calendars(account)
+        if not calendars:
+            return f"No calendars found or could not connect to {account}"
+        lines = [f"📅 Calendars in {account}", "─" * 40]
+        for c in calendars:
+            primary = " (primary)" if c.primary else ""
+            lines.append(f"  {c.name}{primary}")
+            lines.append(f"    ID: {c.id}")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def calendar_list_events(
+        account: str,
+        calendar_id: str = "primary",
+        days: int = 7,
+        limit: int = 50
+    ) -> str:
+        """List upcoming events."""
+        from datetime import datetime, timedelta, timezone
+        start = datetime.now(timezone.utc)
+        end = start + timedelta(days=days)
+        page = await calendar_manager.list_events(account, calendar_id, start, end, limit)
+        if not page.events:
+            return f"No events in the next {days} days"
+        lines = [f"📅 Events ({days} days)", "─" * 40]
+        for e in page.events:
+            date_str = e.start.strftime("%m/%d %H:%M") if not e.all_day else e.start.strftime("%m/%d") + " (all day)"
+            lines.append(f"{date_str} | {e.title}")
+            if e.location:
+                lines.append(f"    📍 {e.location}")
+            lines.append(f"    ID: {e.id}")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def calendar_get_event(account: str, calendar_id: str, event_id: str) -> str:
+        """Get full event details."""
+        event = await calendar_manager.get_event(account, calendar_id, event_id)
+        if not event:
+            return f"Event not found: {event_id}"
+        lines = [
+            f"📅 {event.title}",
+            "─" * 40,
+            f"Start: {event.start}",
+            f"End: {event.end}",
+        ]
+        if event.location:
+            lines.append(f"Location: {event.location}")
+        if event.description:
+            lines.append(f"\nDescription:\n{event.description}")
+        if event.attendees:
+            lines.append(f"\nAttendees:")
+            for a in event.attendees:
+                status = a.response.value if a.response else "unknown"
+                lines.append(f"  - {a.email} ({status})")
+        if event.conference_link:
+            lines.append(f"\nConference: {event.conference_link}")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def calendar_create_event(
+        account: str,
+        title: str,
+        start: str,
+        end: str,
+        calendar_id: str = "primary",
+        description: str = "",
+        location: str = "",
+        attendees: str = "",
+        all_day: bool = False,
+        conference: bool = False
+    ) -> str:
+        """Create a new event. Dates should be ISO format (YYYY-MM-DDTHH:MM:SS)."""
+        from datetime import datetime
+        try:
+            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        except ValueError as e:
+            return f"❌ Invalid date format: {e}"
+        
+        attendee_list = [a.strip() for a in attendees.split(",") if a.strip()] if attendees else None
+        
+        return await calendar_manager.create_event(
+            account, calendar_id, title, start_dt, end_dt,
+            description=description or None,
+            location=location or None,
+            attendees=attendee_list,
+            all_day=all_day,
+            conference=conference
+        )
+    
+    @mcp.tool()
+    async def calendar_delete_event(account: str, calendar_id: str, event_id: str) -> str:
+        """Delete an event."""
+        return await calendar_manager.delete_event(account, calendar_id, event_id)
+
+# =============================================================================
+# CONTACTS TOOLS
+# =============================================================================
+if CONTACTS_AVAILABLE:
+    @mcp.tool()
+    def contacts_list_accounts() -> str:
+        """List all configured contacts accounts."""
+        return contacts_manager.list_accounts()
+    
+    @mcp.tool()
+    def contacts_add_account(
+        name: str,
+        adapter: str,
+        credentials_ref: str = "",
+        config: str = "{}"
+    ) -> str:
+        """Add a new contacts account."""
+        try:
+            config_dict = json.loads(config) if config else {}
+            return contacts_manager.add_account(name, adapter, credentials_ref, config_dict)
+        except json.JSONDecodeError as e:
+            return f"Invalid config JSON: {e}"
+    
+    @mcp.tool()
+    def contacts_remove_account(name: str) -> str:
+        """Remove a contacts account."""
+        return contacts_manager.remove_account(name)
+    
+    @mcp.tool()
+    async def contacts_list(account: str, limit: int = 50) -> str:
+        """List contacts."""
+        page = await contacts_manager.list_contacts(account, limit)
+        if not page.contacts:
+            return f"No contacts found in {account}"
+        lines = [f"👤 Contacts in {account}", "─" * 40]
+        for c in page.contacts:
+            email = c.primary_email or ""
+            phone = c.primary_phone or ""
+            info = f" | {email}" if email else ""
+            info += f" | {phone}" if phone else ""
+            lines.append(f"  {c.display_name}{info}")
+            lines.append(f"    ID: {c.id}")
+        if page.next_cursor:
+            lines.append(f"\n(more contacts available)")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def contacts_search(account: str, query: str, limit: int = 20) -> str:
+        """Search contacts by name, email, or phone."""
+        contacts = await contacts_manager.search_contacts(account, query, limit)
+        if not contacts:
+            return f"No contacts matching: {query}"
+        lines = [f"🔍 Search: {query}", "─" * 40]
+        for c in contacts:
+            email = c.primary_email or ""
+            lines.append(f"  {c.display_name} | {email}")
+            lines.append(f"    ID: {c.id}")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def contacts_get(account: str, contact_id: str) -> str:
+        """Get full contact details."""
+        contact = await contacts_manager.get_contact(account, contact_id)
+        if not contact:
+            return f"Contact not found: {contact_id}"
+        lines = [
+            f"👤 {contact.display_name}",
+            "─" * 40,
+        ]
+        if contact.organizations:
+            org = contact.organizations[0]
+            if org.title and org.name:
+                lines.append(f"🏢 {org.title} at {org.name}")
+            elif org.name:
+                lines.append(f"🏢 {org.name}")
+            elif org.title:
+                lines.append(f"💼 {org.title}")
+        if contact.emails:
+            lines.append("\nEmails:")
+            for e in contact.emails:
+                primary = " (primary)" if e.primary else ""
+                lines.append(f"  📧 {e.address}{primary}")
+        if contact.phones:
+            lines.append("\nPhones:")
+            for p in contact.phones:
+                primary = " (primary)" if p.primary else ""
+                lines.append(f"  📱 {p.number} ({p.type.value}){primary}")
+        if contact.addresses:
+            lines.append("\nAddresses:")
+            for a in contact.addresses:
+                lines.append(f"  📍 {a.formatted or 'No formatted address'}")
+        if contact.birthday:
+            lines.append(f"\n🎂 Birthday: {contact.birthday}")
+        if contact.notes:
+            lines.append(f"\nNotes: {contact.notes}")
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    async def contacts_create(
+        account: str,
+        given_name: str = "",
+        family_name: str = "",
+        email: str = "",
+        phone: str = "",
+        organization: str = "",
+        title: str = "",
+        notes: str = ""
+    ) -> str:
+        """Create a new contact."""
+        return await contacts_manager.create_contact(
+            account,
+            given_name=given_name or None,
+            family_name=family_name or None,
+            email=email or None,
+            phone=phone or None,
+            organization=organization or None,
+            title=title or None,
+            notes=notes or None
+        )
+    
+    @mcp.tool()
+    async def contacts_update(
+        account: str,
+        contact_id: str,
+        given_name: str = None,
+        family_name: str = None,
+        email: str = None,
+        phone: str = None,
+        organization: str = None,
+        title: str = None,
+        notes: str = None
+    ) -> str:
+        """Update an existing contact."""
+        return await contacts_manager.update_contact(
+            account, contact_id,
+            given_name=given_name,
+            family_name=family_name,
+            email=email,
+            phone=phone,
+            organization=organization,
+            title=title,
+            notes=notes
+        )
+    
+    @mcp.tool()
+    async def contacts_delete(account: str, contact_id: str) -> str:
+        """Delete a contact."""
+        return await contacts_manager.delete_contact(account, contact_id)
+    
+    @mcp.tool()
+    async def contacts_list_groups(account: str) -> str:
+        """List contact groups/labels."""
+        groups = await contacts_manager.list_groups(account)
+        if not groups:
+            return f"No groups found in {account}"
+        lines = [f"🏷️ Contact Groups in {account}", "─" * 40]
+        for g in groups:
+            type_str = " (system)" if g.group_type == "system" else ""
+            lines.append(f"  {g.name}{type_str} - {g.member_count} members")
+            lines.append(f"    ID: {g.id}")
+        return "\n".join(lines)
 
 # =============================================================================
 # OPS MANAGEMENT
