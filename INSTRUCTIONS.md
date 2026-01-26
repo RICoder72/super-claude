@@ -9,6 +9,14 @@
 - If a capability is missing, suggest we build it
 - Tracer bullet approach: prove it works minimally first
 
+## Super Claude Development
+- Code lives in `/data/mcps/` (git tracked), gets COPIED into containers at build
+- Quick iteration: edit files, run `dev-sync.sh`, new chat to test
+- Finalize: `git commit`, run `rebuild-*.sh` scripts
+- Plugins: use `plugin_reload_changed()` for hot-reload without rebuild
+- For full docs: `build_help()` tool or `/data/scripts/README.md`
+- Both MCPs can rebuild each other (mutual administration)
+
 ## Document Preferences
 - Work in markdown (.md) by default
 - Keep markdown ASCII-safe:

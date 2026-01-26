@@ -1999,6 +1999,42 @@ def rebuild_ops() -> str:
     steps.append("⚠️  Remember: Disconnect and reconnect the Ops connector, then start a new chat.")
     
     return "\n".join(steps)
+
+@mcp.tool()
+def build_help() -> str:
+    """Get help on building, deploying, and developing Super Claude containers."""
+    readme_path = SUPER_CLAUDE_ROOT / "scripts" / "README.md"
+    if readme_path.exists():
+        return readme_path.read_text()
+    
+    # Fallback if README doesn't exist
+    return """# Super Claude Build Help
+
+## Quick Commands
+
+| Task | Command |
+|------|---------|
+| Quick sync during dev | `./scripts/dev-sync.sh super-claude` |
+| Full rebuild main | `./scripts/rebuild-super-claude.sh` |
+| Full rebuild ops | `./scripts/rebuild-ops.sh` |
+| Rebuild both | `./scripts/rebuild-all.sh` |
+
+## From MCP Tools
+
+- `rebuild_ops()` - Rebuild ops container (from super-claude)
+- `rebuild_super_claude()` - Rebuild main container (from ops)
+- `plugin_reload_changed()` - Hot-reload modified plugins (no rebuild needed)
+
+## Key Concept
+
+Code is COPIED into containers at build time. Edit files in `/data/mcps/super-claude/`,
+then either:
+- Quick test: `./scripts/dev-sync.sh` (temporary)
+- Finalize: `./scripts/rebuild-super-claude.sh` (permanent)
+
+See /data/scripts/README.md for full documentation.
+"""
+
 # STARTUP LOGGING AND PLUGIN LOADING
 # =============================================================================
 def load_plugins_and_log():
