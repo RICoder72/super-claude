@@ -5,13 +5,18 @@ WORKDIR /app
 # Set Docker API version to match Synology's daemon
 ENV DOCKER_API_VERSION=1.41
 
-# Install Docker CLI, git, and other tools
+# Install Docker CLI, git, build tools, and other dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         gnupg \
-        git && \
+        git \
+        gcc \
+        g++ \
+        pkg-config \
+        libcairo2-dev \
+        libffi-dev && \
     install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
     chmod a+r /etc/apt/keyrings/docker.gpg && \

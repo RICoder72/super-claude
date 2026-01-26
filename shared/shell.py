@@ -28,11 +28,13 @@ BLOCKED_PATTERNS = [
 ]
 
 # Container names that should not be stopped/removed via shell
+# Note: These are checked with word boundaries to avoid false positives
+# (e.g., "super-claude" shouldn't block "super-claude-ops")
 PROTECTED_CONTAINERS = [
-    'super-claude',
-    'super-claude-ops', 
+    'super-claude-ops',      # Longer names first to match precisely
     'super-claude-router',
     'super-claude-auth',
+    'super-claude',          # Base name last
 ]
 
 
@@ -54,12 +56,16 @@ def is_command_blocked(command: str) -> Tuple[bool, str]:
             return True, f"Command matches blocked pattern: {pattern}"
     
     # Check for attempts to stop/rm protected containers
+    # Use regex with word boundary to avoid false positives
     for container in PROTECTED_CONTAINERS:
-        if f'docker stop {container}' in command_lower:
+        # Pattern matches: docker stop <container> (with word boundary after)
+        stop_pattern = rf'\bdocker\s+stop\s+{re.escape(container)}(?:\s|$|;|&|\|)'
+        rm_pattern = rf'\bdocker\s+rm\s+{re.escape(container)}(?:\s|$|;|&|\|)'
+        
+        if re.search(stop_pattern, command_lower):
             return True, f"Cannot stop protected container: {container}"
-        if f'docker rm {container}' in command_lower and 'super-claude' in container:
-            # Allow ops to manage super-claude and vice versa, but not self
-            pass  # Will be handled by specific MCP logic
+        if re.search(rm_pattern, command_lower):
+            return True, f"Cannot remove protected container: {container}"
     
     return False, ""
 

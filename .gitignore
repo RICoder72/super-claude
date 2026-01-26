@@ -40,3 +40,19 @@ logs/
 # Outputs (generated files)
 outputs/
 config/gdrive_*.json
+
+# OAuth tokens (sensitive)
+config/*_token.json
+config/*_token_raw.json
+
+# Temporary files
+temp/
+
+# User documents
+documents/
+
+# Cloned repos
+repos/
+
+# Backups
+backups/

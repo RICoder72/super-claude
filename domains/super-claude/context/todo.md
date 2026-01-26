@@ -2,17 +2,20 @@
 
 ## In Progress
 
-**Supernote Plugin**
+**Supernote Plugin v0.10.0**
 - [x] Plugin architecture using storage abstraction (not direct Supernote API)
 - [x] Per-domain config in `plugins/supernote/config.json`
 - [x] Setup tool with account + subfolder configuration
 - [x] Pull/push/list tools implemented
-- [x] Local folder structure (notes/, documents/, converted/)
-- [x] .note → PNG conversion via supernotelib
+- [x] Local folder structure (notes/, documents/, converted/, archive/)
+- [x] .note → PNG conversion via supernote-tool
 - [x] base_path config for non-root Supernote sync folders
-- [x] Fixed missing method references (removed supernote_mark_processed/unprocess from registration)
-- [ ] Implement supernote_mark_processed and supernote_unprocess tools
-- [ ] Test push direction (documents to Supernote)
+- [x] supernote_mark_processed / supernote_unprocess tools (2026-01-21)
+- [x] supernote_read_annotations tool for manual .mark processing (2026-01-21)
+- [x] Auto-.mark processing on pull (2026-01-21) - downloaded .mark files auto-convert and merge
+- [x] Test push direction - working (2026-01-21)
+- [ ] **Markdown extraction from notes** - Run OCR/vision on converted PNGs, save as .md
+- [ ] **MCP tool schema caching** - New tools not visible until new conversation (documented)
 
 ---
 

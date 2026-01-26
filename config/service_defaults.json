@@ -1,0 +1,8 @@
+{
+  "global": {
+    "mail": null,
+    "calendar": null,
+    "storage": null
+  },
+  "domains": {}
+}

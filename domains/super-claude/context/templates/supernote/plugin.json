@@ -1,0 +1,16 @@
+{
+  "name": "supernote",
+  "version": "0.11.0",
+  "description": "Sync Supernote handwritten notes with Super Claude domains via cloud storage",
+  "author": "Matthew",
+  "license": "MIT",
+  "entry_point": "supernote.py",
+  "class_name": "SupernotePlugin",
+  "requires": {
+    "python": ["reportlab", "pymupdf"],
+    "system": ["supernote-tool"]
+  },
+  "super_claude_version": ">=1.0.0",
+  "homepage": "https://github.com/yourusername/super-claude-plugin-supernote",
+  "keywords": ["supernote", "notes", "sync", "handwriting", "markdown", "vision"]
+}

@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Dict, Optional, Type, List
 import logging
 
-from storage_interface import StorageProvider, StorageAccount, FileInfo
+# Support both package import and direct import
+try:
+    from .storage_interface import StorageProvider, StorageAccount, FileInfo
+except ImportError:
+    from storage_interface import StorageProvider, StorageAccount, FileInfo
 
 logger = logging.getLogger(__name__)
 
@@ -221,3 +225,10 @@ class StorageManager:
         if not provider:
             return False
         return await provider.exists(remote_path)
+    
+    async def delete(self, account_name: str, remote_path: str) -> str:
+        """Delete file from specified account."""
+        provider = await self.get_provider(account_name)
+        if not provider:
+            return f"❌ Could not connect to account: {account_name}"
+        return await provider.delete(remote_path)

@@ -59,6 +59,24 @@ def _run(command: str, timeout: int = 120) -> tuple[bool, str]:
     except Exception as e:
         return False, f"Error: {e}"
 
+def _validate_path(path: str) -> Path:
+    """
+    Validate and resolve path within sandbox.
+    Raises ValueError if path escapes sandbox.
+    """
+    # Resolve relative to SUPER_CLAUDE_ROOT
+    if path.startswith("/"):
+        full_path = Path(path)
+    else:
+        full_path = SUPER_CLAUDE_ROOT / path
+    
+    # Resolve to absolute and check it's within sandbox
+    resolved = full_path.resolve()
+    if not str(resolved).startswith(str(SUPER_CLAUDE_ROOT.resolve())):
+        raise ValueError(f"Path outside sandbox: {path}")
+    
+    return resolved
+
 # =============================================================================
 # HEALTH
 # =============================================================================
@@ -89,23 +107,87 @@ def rebuild_super_claude() -> str:
     Full rebuild of super-claude container.
     Stops, removes, rebuilds image, and restarts with correct mounts.
     """
-    steps = ["🔨 Rebuilding Super Claude...", ""]
+    # Ensure temp directory exists
+    temp_dir = SUPER_CLAUDE_ROOT / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
     
-    # Step 1: Build new image
-    steps.append("1️⃣ Building image...")
-    success, output = _run("docker build -t super-claude -f mcps/super-claude/Dockerfile .", timeout=300)
+    # Make script executable and run in background
+    script_path = SUPER_CLAUDE_ROOT / "scripts" / "rebuild-super-claude.sh"
+    _run(f"chmod +x {script_path}", timeout=5)
+    
+    # Launch in background with nohup
+    success, output = _run(f"nohup {script_path} > /dev/null 2>&1 &", timeout=5)
+    
     if not success:
-        return "\n".join(steps) + f"\n❌ Build failed:\n{output}"
-    steps.append("   ✅ Image built")
+        return f"❌ Failed to start rebuild:\n{output}"
     
-    # Step 2: Stop and remove old container
-    steps.append("2️⃣ Stopping old container...")
-    _run("docker stop super-claude")
-    _run("docker rm super-claude")
-    steps.append("   ✅ Stopped and removed")
+    return """🔨 Rebuild started in background!
+
+Monitor progress with: `rebuild_status()`
+Or check logs with: `logs_super_claude()`
+
+⚠️  When complete, start a new chat to reconnect."""
+
+@mcp.tool()
+def rebuild_status() -> str:
+    """Check the status of a background rebuild."""
+    log_path = SUPER_CLAUDE_ROOT / "temp" / "rebuild.log"
     
-    # Step 3: Start new container with network
-    steps.append("3️⃣ Starting new container...")
+    if not log_path.exists():
+        return "📋 No rebuild log found. No rebuild in progress or log was cleared."
+    
+    content = log_path.read_text()
+    if not content.strip():
+        return "📋 Rebuild log is empty. Rebuild may be starting..."
+    
+    # Check if complete
+    if "✅ Super Claude rebuilt successfully!" in content:
+        status = "✅ COMPLETE"
+    elif "❌" in content.split("\n")[-5:]:  # Check last 5 lines for errors
+        status = "❌ FAILED"
+    else:
+        status = "🔄 IN PROGRESS"
+    
+    lines = content.strip().split("\n")
+    recent = "\n".join(lines[-15:])  # Last 15 lines
+    
+    return f"📋 Rebuild Status: {status}\n{'─' * 40}\n{recent}"
+
+# =============================================================================
+# SUPER CLAUDE MANAGEMENT - INDIVIDUAL STEPS
+# =============================================================================
+@mcp.tool()
+def build_super_claude_image() -> str:
+    """
+    Build the super-claude Docker image without stopping the container.
+    Use this to pre-build before a quick restart.
+    """
+    success, output = _run(
+        "docker build -t super-claude -f mcps/super-claude/Dockerfile .", 
+        timeout=300
+    )
+    if success:
+        return "✅ Image built successfully!\n\nNext steps:\n1. stop_super_claude()\n2. start_super_claude()"
+    return f"❌ Build failed:\n{output}"
+
+@mcp.tool()
+def stop_super_claude() -> str:
+    """Stop and remove the super-claude container."""
+    _run("docker stop super-claude", timeout=30)
+    success, output = _run("docker rm super-claude", timeout=10)
+    
+    # Verify it's gone
+    check_success, check_output = _run("docker ps -a --filter name=super-claude --format '{{.Names}}'")
+    if "super-claude" not in check_output:
+        return "✅ Super Claude stopped and removed"
+    return f"⚠️ Container may still exist:\n{check_output}"
+
+@mcp.tool()
+def start_super_claude() -> str:
+    """
+    Start the super-claude container from the existing image.
+    Use after stop_super_claude() or after building a new image.
+    """
     run_cmd = f"""docker run -d \
         --name super-claude \
         --network {DOCKER_NETWORK} \
@@ -115,17 +197,11 @@ def rebuild_super_claude() -> str:
         -v /var/run/docker.sock:/var/run/docker.sock \
         --restart unless-stopped \
         super-claude"""
+    
     success, output = _run(run_cmd)
-    if not success:
-        return "\n".join(steps) + f"\n❌ Run failed:\n{output}"
-    steps.append("   ✅ Started")
-    
-    steps.append("")
-    steps.append("✅ Super Claude rebuilt successfully!")
-    steps.append("")
-    steps.append("⚠️  Remember: Disconnect and reconnect the Super Claude connector, then start a new chat.")
-    
-    return "\n".join(steps)
+    if success:
+        return "✅ Super Claude started!\n\n⚠️  Start a new chat to reconnect."
+    return f"❌ Failed to start:\n{output}"
 
 @mcp.tool()
 def restart_super_claude() -> str:
@@ -142,6 +218,129 @@ def logs_super_claude(lines: int = 50) -> str:
     if success:
         return f"📋 Super Claude Logs (last {lines} lines):\n{'─' * 40}\n{output}"
     return f"❌ Could not get logs:\n{output}"
+
+# =============================================================================
+# FILE OPERATIONS
+# =============================================================================
+@mcp.tool()
+def fs_read(path: str) -> str:
+    """
+    Read file contents from the super-claude repo.
+    Use this when super-claude container is down and you need to inspect/fix files.
+    
+    Args:
+        path: Path relative to repo root (or absolute within /data)
+    """
+    try:
+        resolved = _validate_path(path)
+        if not resolved.exists():
+            return f"❌ File not found: {path}"
+        if not resolved.is_file():
+            return f"❌ Not a file: {path}"
+        
+        content = resolved.read_text()
+        return f"📄 {path}\n{'─' * 40}\n{content}"
+    except ValueError as e:
+        return f"❌ {e}"
+    except Exception as e:
+        return f"❌ Error reading file: {e}"
+
+@mcp.tool()
+def fs_write(path: str, content: str) -> str:
+    """
+    Write content to a file. Creates parent directories if needed.
+    Use this when super-claude container is down and you need to fix files.
+    
+    Args:
+        path: Path relative to repo root (or absolute within /data)
+        content: Content to write
+    """
+    try:
+        resolved = _validate_path(path)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        resolved.write_text(content)
+        return f"✅ Wrote {len(content)} bytes to {path}"
+    except ValueError as e:
+        return f"❌ {e}"
+    except Exception as e:
+        return f"❌ Error writing file: {e}"
+
+@mcp.tool()
+def fs_list(path: str = ".") -> str:
+    """
+    List directory contents.
+    
+    Args:
+        path: Path relative to repo root (default: repo root)
+    """
+    try:
+        resolved = _validate_path(path)
+        if not resolved.exists():
+            return f"❌ Path not found: {path}"
+        if not resolved.is_dir():
+            return f"❌ Not a directory: {path}"
+        
+        lines = [f"📂 {path}", "─" * 40]
+        
+        # Sort: directories first, then files
+        items = sorted(resolved.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+        
+        for item in items:
+            if item.name.startswith('.') and item.name not in ['.env', '.gitignore']:
+                continue  # Skip hidden files except common ones
+            
+            if item.is_dir():
+                lines.append(f"  📁 {item.name}/")
+            else:
+                size = item.stat().st_size
+                if size < 1024:
+                    size_str = f"{size} B"
+                elif size < 1024 * 1024:
+                    size_str = f"{size/1024:.1f} KB"
+                else:
+                    size_str = f"{size/(1024*1024):.1f} MB"
+                lines.append(f"  📄 {item.name} ({size_str})")
+        
+        return "\n".join(lines)
+    except ValueError as e:
+        return f"❌ {e}"
+    except Exception as e:
+        return f"❌ Error listing directory: {e}"
+
+@mcp.tool()
+def fs_str_replace(path: str, old_str: str, new_str: str) -> str:
+    """
+    Replace a string in a file. The old_str must appear exactly once.
+    Use this for surgical edits when super-claude is down.
+    
+    Args:
+        path: Path to file
+        old_str: String to find (must be unique in file)
+        new_str: String to replace with
+    """
+    try:
+        resolved = _validate_path(path)
+        if not resolved.exists():
+            return f"❌ File not found: {path}"
+        if not resolved.is_file():
+            return f"❌ Not a file: {path}"
+        
+        content = resolved.read_text()
+        count = content.count(old_str)
+        
+        if count == 0:
+            return f"❌ String not found in {path}"
+        if count > 1:
+            return f"❌ String appears {count} times in {path} (must be unique)"
+        
+        new_content = content.replace(old_str, new_str)
+        resolved.write_text(new_content)
+        
+        return f"✅ Replaced in {path}"
+    except ValueError as e:
+        return f"❌ {e}"
+    except Exception as e:
+        return f"❌ Error: {e}"
 
 # =============================================================================
 # BACKUP & RESTORE

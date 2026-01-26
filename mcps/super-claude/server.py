@@ -56,12 +56,12 @@ if str(PLUGINS_DIR) not in sys.path:
     sys.path.insert(0, str(PLUGINS_DIR))
 
 try:
-    from plugin_loader import PluginLoader
-    from plugin_manager import PluginManager
+    from dynamic_loader import DynamicPluginLoader
     PLUGINS_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"Plugin system unavailable: {e}")
     PLUGINS_AVAILABLE = False
+    DynamicPluginLoader = None
 
 # Also import 1Password helper for backward compatibility
 try:
@@ -73,27 +73,26 @@ except ImportError:
 # Initialize FastMCP
 mcp = FastMCP("Super Claude")
 
-# Initialize plugin system
+# Initialize dynamic plugin system (tools registered at runtime, not import time)
+dynamic_loader = None
 if PLUGINS_AVAILABLE:
-    plugin_loader = PluginLoader(PLUGINS_DIR)
-    plugin_manager = PluginManager(plugin_loader)
-    
-    # Load all plugins at startup
-    results = plugin_loader.load_all()
-    for plugin_name, success in results.items():
-        status = "✅" if success else "❌"
-        logger.info(f"{status} Plugin {plugin_name}: {'loaded' if success else 'failed'}")
+    dynamic_loader = DynamicPluginLoader(mcp, PLUGINS_DIR)
+    # Plugins loaded after all core tools are registered (see end of file)
 
 # =============================================================================
 # STORAGE SYSTEM INITIALIZATION
 # =============================================================================
+# Add paths for package imports
+if str(CORE_DIR.parent) not in sys.path:
+    sys.path.insert(0, str(CORE_DIR.parent))
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
-if str(PROVIDERS_DIR) not in sys.path:
-    sys.path.insert(0, str(PROVIDERS_DIR))
+if str(PROVIDERS_DIR.parent) not in sys.path:
+    sys.path.insert(0, str(PROVIDERS_DIR.parent))
 
 try:
-    from storage_manager import StorageManager
+    from core.storage_manager import StorageManager
+    from core.storage_interface import StorageProvider, StorageAccount, FileInfo
     from providers.gdrive import GoogleDriveProvider
     storage_manager = StorageManager(STORAGE_CONFIG)
     storage_manager.register_provider_type("gdrive", GoogleDriveProvider)
@@ -351,6 +350,90 @@ def _context_load_impl(domain: str) -> str:
 # =============================================================================
 # CORE SESSION TOOLS
 # =============================================================================
+
+def _get_tool_inventory() -> str:
+    """Generate a comprehensive tool inventory for session context."""
+    lines = []
+    
+    # Core Tools by Category
+    lines.append("🔧 **Core Tools**")
+    lines.append("")
+    
+    lines.append("**Secrets & Auth** - Never ask user for credentials, use these:")
+    lines.append("  • `auth_get(item_name)` - Get secret from 1Password (e.g., 'GitHub PAT - Claude Code')")
+    lines.append("  • `auth_set(title, fields)` - Store a new secret")
+    lines.append("")
+    
+    lines.append("**Files & Context**")
+    lines.append("  • `fs_read/write/list` - File operations in /data sandbox")
+    lines.append("  • `context_load(domain)` - Load domain context")
+    lines.append("  • `context_get(domain, file)` - Read specific context file")
+    lines.append("  • `publish(source)` - Make file publicly accessible")
+    lines.append("")
+    
+    lines.append("**Git** - For repository operations:")
+    lines.append("  • `git_clone/pull/push/commit/status/log/diff/branch/checkout`")
+    lines.append("  • For GitHub push: `git_push(path, auth_item='GitHub PAT - Claude Code')`")
+    lines.append("")
+    
+    lines.append("**Infrastructure**")
+    lines.append("  • `shell_exec(cmd)` - Run shell commands")
+    lines.append("  • `docker_ps/logs/restart/stop/start` - Container management")
+    lines.append("  • `rebuild_ops()` - Rebuild ops container")
+    lines.append("")
+    
+    # Configured Services
+    if STORAGE_AVAILABLE:
+        accounts = list(storage_manager.accounts.keys())
+        lines.append(f"**Cloud Storage** (accounts: {', '.join(accounts) or 'none'})")
+        lines.append("  • `storage_list_files/upload/download(account, ...)`")
+        lines.append("")
+    
+    if MAIL_AVAILABLE:
+        accounts = list(mail_manager.accounts.keys())
+        lines.append(f"**Mail** (accounts: {', '.join(accounts) or 'none'})")
+        lines.append("  • `mail_list_messages/get_message/send/search(account, ...)`")
+        lines.append("")
+    
+    if CALENDAR_AVAILABLE:
+        accounts = list(calendar_manager.accounts.keys())
+        lines.append(f"**Calendar** (accounts: {', '.join(accounts) or 'none'})")
+        lines.append("  • `calendar_list_events/create_event/get_event(account, ...)`")
+        lines.append("")
+    
+    if CONTACTS_AVAILABLE:
+        accounts = list(contacts_manager.accounts.keys())
+        lines.append(f"**Contacts** (accounts: {', '.join(accounts) or 'none'})")
+        lines.append("  • `contacts_list/search/get/create(account, ...)`")
+        lines.append("")
+    
+    # Plugin Tools
+    if PLUGINS_AVAILABLE and dynamic_loader:
+        lines.append("🔌 **Plugins**")
+        lines.append("")
+        for name, plugin in dynamic_loader.plugins.items():
+            if hasattr(plugin, 'metadata') and hasattr(plugin, 'tools'):
+                version = plugin.metadata.get('version', '?')
+                desc = plugin.metadata.get('description', '')
+                tool_names = list(plugin.tools.keys())
+                lines.append(f"**{name}** v{version}" + (f" - {desc}" if desc else ""))
+                # Show key tools (not all)
+                if len(tool_names) > 5:
+                    lines.append(f"  • Key tools: {', '.join(tool_names[:5])}...")
+                else:
+                    lines.append(f"  • Tools: {', '.join(tool_names)}")
+                lines.append("")
+    
+    # Plugin Management
+    lines.append("**Plugin Management**")
+    lines.append("  • `plugin_install(url)` - Install from GitHub")
+    lines.append("  • `plugin_update(name)` - Update plugin(s)")
+    lines.append("  • `plugin_status()` - Show loaded plugins")
+    lines.append("")
+    
+    return "\n".join(lines)
+
+
 @mcp.tool()
 def session_start(user_message: str = "") -> str:
     """
@@ -358,22 +441,21 @@ def session_start(user_message: str = "") -> str:
     """
     lines = ["🚀 Super Claude Session Started", "─" * 40, ""]
     
-    # Plugin status
-    if PLUGINS_AVAILABLE:
-        info = plugin_manager.get_plugin_info()
-        lines.append(f"🔌 Plugins: {info['plugin_count']} loaded ({info['tool_count']} tools)")
-        lines.append("")
-    
-    # Token status
+    # Token status (show warnings first)
     token_warning = _check_token_expiry()
     if token_warning:
         lines.append(token_warning)
         lines.append("")
     
+    # Tool Inventory
+    lines.append(_get_tool_inventory())
+    lines.append("─" * 40)
+    lines.append("")
+    
     # Available domains
     domains = _get_available_domains()
     if domains:
-        lines.append("📚 Available Domains:")
+        lines.append("📚 **Available Domains**")
         for d in domains:
             desc = f" - {d['description']}" if d['description'] else ""
             triggers = f" (triggers: {', '.join(d['keywords'][:3])})" if d['keywords'] else " ⚠️ no triggers"
@@ -386,26 +468,22 @@ def session_start(user_message: str = "") -> str:
         detected = _detect_domain(user_message)
         if detected:
             lines.append(f"🎯 Auto-detected domain: {detected}")
-            lines.append(f"   Loading context automatically...")
             lines.append("")
     
     if detected:
         domain_content = _context_load_impl(detected)
         lines.append(domain_content)
     else:
-        lines.append("💡 No specific domain detected. Say 'let's work on [domain]' or ask about:")
-        lines.append("   • Super Claude infrastructure, Docker, MCP, plugins")
-        lines.append("   • Projects, tasks, backlog")
-        lines.append("   • Or any registered domain")
-    
+        lines.append("💡 No specific domain detected. Use `context_load(domain)` or mention a topic.")
     
     # Global instructions
     global_instructions = _load_global_instructions()
     if global_instructions:
         lines.append("")
-        lines.append("📋 Global Instructions")
+        lines.append("📋 **Global Instructions**")
         lines.append("─" * 30)
         lines.append(global_instructions)
+    
     return "\n".join(lines)
 
 @mcp.tool()
@@ -417,8 +495,8 @@ def ping() -> str:
     if warning:
         response += f"\n\n{warning}"
     
-    if PLUGINS_AVAILABLE:
-        info = plugin_manager.get_plugin_info()
+    if PLUGINS_AVAILABLE and dynamic_loader:
+        info = dynamic_loader.get_plugin_info()
         response += f"\n\n🔌 Plugins: {info['plugin_count']} loaded"
     
     return response
@@ -643,38 +721,6 @@ def context_list() -> str:
     header = "📚 Available Domains\n" + "─" * 30
     listing = "\n".join(domains) if domains else "(no domains found)"
     return f"{header}\n{listing}"
-
-# =============================================================================
-# LEGACY AUTH TOOLS (For backward compatibility, use plugins in new code)
-# =============================================================================
-if get_secret:
-    @mcp.tool()
-    async def auth_get(item_name: str, field: str = "credential", vault: str = "Key Vault") -> str:
-        """Get a secret from 1Password."""
-        return await get_secret(item_name, field, vault)
-
-    @mcp.tool()
-    async def auth_get_ref(secret_ref: str) -> str:
-        """Get a secret using a full 1Password secret reference."""
-        return await get_secret_by_ref(secret_ref)
-
-    @mcp.tool()
-    async def auth_set(
-        title: str,
-        fields: str,
-        vault: str = "Key Vault",
-        category: str = "api_credential",
-        notes: str = ""
-    ) -> str:
-        """Create a new item in 1Password."""
-        try:
-            import json as json_module
-            fields_dict = json_module.loads(fields)
-            return await create_item(title, fields_dict, vault, category, notes)
-        except json_module.JSONDecodeError as e:
-            return f"❌ Invalid JSON in fields: {e}"
-        except Exception as e:
-            return f"❌ Error creating item: {e}"
 
 # =============================================================================
 # FILESYSTEM TOOLS
@@ -930,22 +976,60 @@ if PLUGINS_AVAILABLE:
     @mcp.tool()
     def plugin_status() -> str:
         """Get status of all loaded plugins and their tools."""
-        return plugin_manager.plugin_status()
+        if dynamic_loader:
+            return dynamic_loader.get_status()
+        return "❌ Plugin system not initialized"
     
     @mcp.tool()
     def plugin_reload_changed() -> str:
         """Check for changed plugins and reload them dynamically."""
-        return plugin_manager.reload_changed()
+        if dynamic_loader:
+            return dynamic_loader.reload_changed()
+        return "❌ Plugin system not initialized"
     
     @mcp.tool()
     def plugin_reload(plugin_name: str) -> str:
         """Manually reload a specific plugin."""
-        return plugin_manager.reload_plugin(plugin_name)
+        if dynamic_loader:
+            if dynamic_loader.reload_plugin(plugin_name):
+                return f"✅ Reloaded plugin: {plugin_name}"
+            return f"❌ Failed to reload plugin: {plugin_name}"
+        return "❌ Plugin system not initialized"
     
     @mcp.tool()
     def plugin_list() -> str:
         """List all available plugins."""
-        return plugin_manager.list_available()
+        if not dynamic_loader:
+            return "❌ Plugin system not initialized"
+        
+        discovered = dynamic_loader.discover_plugins()
+        loaded = set(dynamic_loader.plugins.keys())
+        
+        lines = ["📦 Available Plugins", "─" * 30]
+        for name in discovered:
+            status = "✅ loaded" if name in loaded else "⚪ available"
+            lines.append(f"  {name}: {status}")
+        
+        return "\n".join(lines)
+    
+    @mcp.tool()
+    def plugin_load(plugin_name: str) -> str:
+        """Load a plugin dynamically."""
+        if dynamic_loader:
+            if dynamic_loader.load_plugin(plugin_name):
+                tools = dynamic_loader.plugin_tools.get(plugin_name, set())
+                return f"✅ Loaded plugin: {plugin_name} ({len(tools)} tools)"
+            return f"❌ Failed to load plugin: {plugin_name}"
+        return "❌ Plugin system not initialized"
+    
+    @mcp.tool()
+    def plugin_unload(plugin_name: str) -> str:
+        """Unload a plugin and remove its tools."""
+        if dynamic_loader:
+            if dynamic_loader.unload_plugin(plugin_name):
+                return f"✅ Unloaded plugin: {plugin_name}"
+            return f"❌ Failed to unload plugin: {plugin_name}"
+        return "❌ Plugin system not initialized"
 
 # =============================================================================
 # STORAGE TOOLS (Cloud Storage with Named Accounts)
@@ -1416,6 +1500,466 @@ if CONTACTS_AVAILABLE:
         return "\n".join(lines)
 
 # =============================================================================
+# GIT TOOLS
+# =============================================================================
+def _run_git(args: list, cwd: Path = None, timeout: int = 60) -> tuple[bool, str]:
+    """Run a git command and return (success, output)."""
+    try:
+        result = subprocess.run(
+            ["git"] + args,
+            cwd=cwd or SUPER_CLAUDE_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        output = result.stdout.strip()
+        if result.stderr.strip():
+            output += "\n" + result.stderr.strip() if output else result.stderr.strip()
+        return result.returncode == 0, output
+    except subprocess.TimeoutExpired:
+        return False, f"Command timed out after {timeout}s"
+    except Exception as e:
+        return False, str(e)
+
+@mcp.tool()
+async def git_clone(url: str, path: str = None, branch: str = None, depth: int = None) -> str:
+    """
+    Clone a git repository.
+    
+    Args:
+        url: Repository URL (HTTPS or SSH)
+        path: Local path to clone to (default: repo name in /data/repos/)
+        branch: Branch to clone (default: default branch)
+        depth: Shallow clone depth (default: full clone)
+    """
+    if path is None:
+        repo_name = url.rstrip("/").split("/")[-1]
+        if repo_name.endswith(".git"):
+            repo_name = repo_name[:-4]
+        path = f"repos/{repo_name}"
+    
+    target = _validate_path(path)
+    if target.exists():
+        return f"❌ Path already exists: {path}"
+    
+    args = ["clone"]
+    if branch:
+        args.extend(["--branch", branch])
+    if depth:
+        args.extend(["--depth", str(depth)])
+    args.extend([url, str(target)])
+    
+    success, output = _run_git(args, timeout=120)
+    
+    if success:
+        return f"✅ Cloned to: {path}\n\n{output}"
+    return f"❌ Clone failed: {output}"
+
+@mcp.tool()
+async def git_status(path: str) -> str:
+    """Show git status for a repository."""
+    repo = _validate_path(path)
+    if not (repo / ".git").exists():
+        return f"❌ Not a git repository: {path}"
+    
+    success, output = _run_git(["status"], cwd=repo)
+    if success:
+        return f"📊 Git Status: {path}\n{'─' * 40}\n{output}"
+    return f"❌ Status failed: {output}"
+
+@mcp.tool()
+async def git_pull(path: str, remote: str = "origin", branch: str = None) -> str:
+    """Pull latest changes from remote."""
+    repo = _validate_path(path)
+    if not (repo / ".git").exists():
+        return f"❌ Not a git repository: {path}"
+    
+    args = ["pull", remote]
+    if branch:
+        args.append(branch)
+    
+    success, output = _run_git(args, cwd=repo)
+    if success:
+        return f"✅ Pull complete\n\n{output}"
+    return f"❌ Pull failed: {output}"
+
+@mcp.tool()
+async def git_push(path: str, remote: str = "origin", branch: str = None, auth_item: str = None) -> str:
+    """
+    Push commits to remote.
+    
+    Args:
+        path: Path to repository
+        remote: Remote name (default: origin)
+        branch: Branch to push (default: current branch)
+        auth_item: 1Password item name for GitHub PAT (for HTTPS remotes)
+    """
+    repo = _validate_path(path)
+    if not (repo / ".git").exists():
+        return f"❌ Not a git repository: {path}"
+    
+    # If auth_item provided, get token and construct authenticated URL
+    if auth_item:
+        try:
+            from core.secrets import secrets_manager
+            token = await secrets_manager.get(auth_item, "credential")
+            
+            # Get current remote URL
+            success, remote_url = _run_git(["remote", "get-url", remote], cwd=repo)
+            if not success:
+                return f"❌ Could not get remote URL: {remote_url}"
+            
+            # Inject token into URL for this push
+            if "github.com" in remote_url and remote_url.startswith("https://"):
+                # Extract username from URL or use token as username
+                auth_url = remote_url.replace("https://", f"https://x-access-token:{token}@")
+                args = ["push", auth_url]
+                if branch:
+                    args.append(branch)
+                success, output = _run_git(args, cwd=repo, timeout=120)
+                if success:
+                    return f"✅ Push complete\n\n{output}"
+                return f"❌ Push failed: {output}"
+        except Exception as e:
+            return f"❌ Auth failed: {e}"
+    
+    args = ["push", remote]
+    if branch:
+        args.append(branch)
+    
+    success, output = _run_git(args, cwd=repo, timeout=120)
+    if success:
+        return f"✅ Push complete\n\n{output}"
+    return f"❌ Push failed: {output}"
+
+@mcp.tool()
+async def git_commit(path: str, message: str, add_all: bool = True) -> str:
+    """Commit changes to repository."""
+    repo = _validate_path(path)
+    if not (repo / ".git").exists():
+        return f"❌ Not a git repository: {path}"
+    
+    if add_all:
+        success, output = _run_git(["add", "-A"], cwd=repo)
+        if not success:
+            return f"❌ Add failed: {output}"
+    
+    success, output = _run_git(["commit", "-m", message], cwd=repo)
+    if success:
+        return f"✅ Committed\n\n{output}"
+    if "nothing to commit" in output:
+        return f"ℹ️ Nothing to commit\n\n{output}"
+    return f"❌ Commit failed: {output}"
+
+@mcp.tool()
+async def git_log(path: str, count: int = 10, oneline: bool = True) -> str:
+    """Show commit history."""
+    repo = _validate_path(path)
+    if not (repo / ".git").exists():
+        return f"❌ Not a git repository: {path}"
+    
+    args = ["log", f"-{count}"]
+    if oneline:
+        args.append("--oneline")
+    
+    success, output = _run_git(args, cwd=repo)
+    if success:
+        return f"📜 Git Log: {path}\n{'─' * 40}\n{output}"
+    return f"❌ Log failed: {output}"
+
+@mcp.tool()
+async def git_diff(path: str, staged: bool = False) -> str:
+    """Show changes in repository."""
+    repo = _validate_path(path)
+    if not (repo / ".git").exists():
+        return f"❌ Not a git repository: {path}"
+    
+    args = ["diff"]
+    if staged:
+        args.append("--staged")
+    
+    success, output = _run_git(args, cwd=repo)
+    if success:
+        return output if output else "ℹ️ No changes"
+    return f"❌ Diff failed: {output}"
+
+@mcp.tool()
+async def git_branch(path: str, name: str = None, delete: bool = False) -> str:
+    """List, create, or delete branches."""
+    repo = _validate_path(path)
+    if not (repo / ".git").exists():
+        return f"❌ Not a git repository: {path}"
+    
+    if name is None:
+        success, output = _run_git(["branch", "-a"], cwd=repo)
+        if success:
+            return f"🌿 Branches:\n{'─' * 40}\n{output}"
+        return f"❌ Failed: {output}"
+    
+    if delete:
+        success, output = _run_git(["branch", "-d", name], cwd=repo)
+        if success:
+            return f"✅ Deleted branch: {name}"
+        return f"❌ Delete failed: {output}"
+    
+    success, output = _run_git(["branch", name], cwd=repo)
+    if success:
+        return f"✅ Created branch: {name}"
+    return f"❌ Create failed: {output}"
+
+@mcp.tool()
+async def git_checkout(path: str, target: str, create: bool = False) -> str:
+    """Switch branches or restore files."""
+    repo = _validate_path(path)
+    if not (repo / ".git").exists():
+        return f"❌ Not a git repository: {path}"
+    
+    args = ["checkout"]
+    if create:
+        args.append("-b")
+    args.append(target)
+    
+    success, output = _run_git(args, cwd=repo)
+    if success:
+        return f"✅ Switched to: {target}\n\n{output}"
+    return f"❌ Checkout failed: {output}"
+
+# =============================================================================
+# EXTERNAL PLUGIN INSTALLER
+# =============================================================================
+EXTERNAL_PLUGINS_DIR = SUPER_CLAUDE_ROOT / "plugins"
+
+def _validate_plugin(plugin_dir: Path) -> tuple[bool, str, dict | None]:
+    """Validate a plugin directory has required files."""
+    manifest_path = plugin_dir / "plugin.json"
+    
+    if not manifest_path.exists():
+        return False, "Missing plugin.json", None
+    
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError as e:
+        return False, f"Invalid plugin.json: {e}", None
+    
+    required = ["name", "version", "entry_point", "class_name"]
+    missing = [f for f in required if f not in manifest]
+    if missing:
+        return False, f"Missing required fields: {', '.join(missing)}", None
+    
+    entry_point = plugin_dir / manifest["entry_point"]
+    if not entry_point.exists():
+        return False, f"Entry point not found: {manifest['entry_point']}", None
+    
+    return True, "Valid", manifest
+
+def _install_plugin_deps(manifest: dict) -> tuple[bool, str]:
+    """Install Python dependencies from plugin manifest."""
+    requires = manifest.get("requires", {})
+    python_deps = requires.get("python", [])
+    
+    if not python_deps:
+        return True, "No dependencies"
+    
+    try:
+        result = subprocess.run(
+            ["pip", "install"] + python_deps + ["--break-system-packages"],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        if result.returncode == 0:
+            return True, f"Installed: {', '.join(python_deps)}"
+        return False, f"Dependency install failed: {result.stderr}"
+    except Exception as e:
+        return False, str(e)
+
+@mcp.tool()
+async def plugin_install(url: str, branch: str = "main") -> str:
+    """
+    Install a plugin from a Git repository.
+    
+    Args:
+        url: Git repository URL (HTTPS)
+        branch: Branch to clone (default: "main")
+    
+    Example:
+        plugin_install("https://github.com/RICoder72/super-claude-plugin-supernote")
+    """
+    import shutil
+    
+    EXTERNAL_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Extract plugin name from URL
+    repo_name = url.rstrip("/").split("/")[-1]
+    if repo_name.endswith(".git"):
+        repo_name = repo_name[:-4]
+    
+    if repo_name.startswith("super-claude-plugin-"):
+        plugin_name = repo_name[20:]
+    else:
+        plugin_name = repo_name
+    
+    plugin_dir = EXTERNAL_PLUGINS_DIR / plugin_name
+    
+    if plugin_dir.exists():
+        return f"❌ Plugin '{plugin_name}' already installed. Use plugin_update to upgrade."
+    
+    # Clone
+    success, output = _run_git(["clone", "--branch", branch, "--depth", "1", url, str(plugin_dir)], timeout=120)
+    if not success:
+        return f"❌ Clone failed: {output}"
+    
+    # Validate
+    valid, message, manifest = _validate_plugin(plugin_dir)
+    if not valid:
+        shutil.rmtree(plugin_dir, ignore_errors=True)
+        return f"❌ Invalid plugin: {message}"
+    
+    # Install deps
+    dep_success, dep_message = _install_plugin_deps(manifest)
+    if not dep_success:
+        shutil.rmtree(plugin_dir, ignore_errors=True)
+        return f"❌ {dep_message}"
+    
+    # Create symlink for plugin loader
+    app_plugin_link = PLUGINS_DIR / f"{plugin_name}.py"
+    entry_point = plugin_dir / manifest["entry_point"]
+    
+    try:
+        if app_plugin_link.exists() or app_plugin_link.is_symlink():
+            app_plugin_link.unlink()
+        app_plugin_link.symlink_to(entry_point)
+    except Exception as e:
+        logger.warning(f"Could not create symlink: {e}")
+    
+    # Load plugin dynamically
+    if PLUGINS_AVAILABLE and dynamic_loader:
+        try:
+            dynamic_loader.load_plugin(plugin_name)
+        except Exception as e:
+            logger.warning(f"Auto-load failed: {e}")
+    
+    return f"""✅ Installed plugin: {manifest['name']} v{manifest['version']}
+
+**Description:** {manifest.get('description', 'No description')}
+**Author:** {manifest.get('author', 'Unknown')}
+**Dependencies:** {dep_message}
+
+Plugin loaded dynamically - tools are available immediately!"""
+
+@mcp.tool()
+async def plugin_uninstall(name: str) -> str:
+    """Remove an installed external plugin."""
+    import shutil
+    
+    plugin_dir = EXTERNAL_PLUGINS_DIR / name
+    
+    if not plugin_dir.exists():
+        return f"❌ Plugin '{name}' not found in external plugins"
+    
+    # Remove symlink
+    app_plugin_link = PLUGINS_DIR / f"{name}.py"
+    if app_plugin_link.is_symlink():
+        app_plugin_link.unlink()
+    
+    # Unload
+    if PLUGINS_AVAILABLE and dynamic_loader and name in dynamic_loader.plugins:
+        try:
+            dynamic_loader.unload_plugin(name)
+        except Exception as e:
+            logger.warning(f"Unload failed: {e}")
+    
+    # Remove directory
+    try:
+        shutil.rmtree(plugin_dir)
+    except Exception as e:
+        return f"❌ Failed to remove plugin directory: {e}"
+    
+    return f"✅ Uninstalled plugin: {name}"
+
+@mcp.tool()
+async def plugin_update(name: str = "all") -> str:
+    """Update an external plugin to the latest version."""
+    if not EXTERNAL_PLUGINS_DIR.exists():
+        return "📂 No external plugins directory"
+    
+    if name == "all":
+        plugins = [d for d in EXTERNAL_PLUGINS_DIR.iterdir() if d.is_dir() and (d / "plugin.json").exists()]
+        if not plugins:
+            return "📂 No external plugins installed"
+        
+        results = []
+        for plugin_dir in plugins:
+            result = await _update_single_plugin(plugin_dir)
+            results.append(f"**{plugin_dir.name}:** {result}")
+        
+        return "Plugin Update Results:\n\n" + "\n".join(results)
+    else:
+        plugin_dir = EXTERNAL_PLUGINS_DIR / name
+        if not plugin_dir.exists():
+            return f"❌ Plugin '{name}' not found"
+        return await _update_single_plugin(plugin_dir)
+
+async def _update_single_plugin(plugin_dir: Path) -> str:
+    """Update a single plugin directory."""
+    plugin_name = plugin_dir.name
+    
+    valid, _, old_manifest = _validate_plugin(plugin_dir)
+    old_version = old_manifest.get("version", "unknown") if old_manifest else "unknown"
+    
+    success, output = _run_git(["pull", "--ff-only"], cwd=plugin_dir)
+    if not success:
+        return f"❌ Git pull failed: {output}"
+    
+    valid, message, new_manifest = _validate_plugin(plugin_dir)
+    if not valid:
+        return f"❌ Plugin invalid after update: {message}"
+    
+    new_version = new_manifest.get("version", "unknown")
+    _install_plugin_deps(new_manifest)
+    
+    if PLUGINS_AVAILABLE and dynamic_loader and plugin_name in dynamic_loader.plugins:
+        try:
+            dynamic_loader.reload_plugin(plugin_name)
+        except Exception as e:
+            return f"⚠️ Updated {old_version} → {new_version}, but reload failed: {e}"
+    
+    if old_version == new_version:
+        return f"✅ Already at latest ({new_version})"
+    return f"✅ Updated {old_version} → {new_version}"
+
+@mcp.tool()
+async def plugin_list_external() -> str:
+    """List all installed external plugins."""
+    if not EXTERNAL_PLUGINS_DIR.exists():
+        return "📂 No external plugins directory"
+    
+    plugins = [d for d in EXTERNAL_PLUGINS_DIR.iterdir() if d.is_dir()]
+    
+    if not plugins:
+        return "📂 No external plugins installed"
+    
+    lines = ["🔌 External Plugins", "─" * 40]
+    
+    for plugin_dir in sorted(plugins):
+        valid, message, manifest = _validate_plugin(plugin_dir)
+        
+        if valid:
+            name = manifest["name"]
+            version = manifest["version"]
+            desc = manifest.get("description", "")[:50]
+            lines.append(f"✅ **{name}** v{version}")
+            if desc:
+                lines.append(f"   {desc}")
+        else:
+            lines.append(f"❌ **{plugin_dir.name}** - {message}")
+    
+    lines.append("")
+    lines.append(f"Install location: {EXTERNAL_PLUGINS_DIR}")
+    
+    return "\n".join(lines)
+
+# =============================================================================
 # OPS MANAGEMENT
 # =============================================================================
 @mcp.tool()
@@ -1455,143 +1999,55 @@ def rebuild_ops() -> str:
     steps.append("⚠️  Remember: Disconnect and reconnect the Ops connector, then start a new chat.")
     
     return "\n".join(steps)
-
+# STARTUP LOGGING AND PLUGIN LOADING
 # =============================================================================
-# SUPERNOTE PLUGIN TOOLS
-# =============================================================================
-if PLUGINS_AVAILABLE and 'supernote' in plugin_loader.loaded_plugins:
-    _supernote = plugin_loader.loaded_plugins['supernote']
+def load_plugins_and_log():
+    """Load all plugins dynamically and log registered tools."""
     
-    @mcp.tool()
-    async def supernote_setup(
-        domain: str,
-        account: str,
-        subfolder: str,
-        sync_notes: bool = True,
-        sync_documents: bool = True,
-        convert_to: str = "pdf,png"
-    ) -> str:
-        """
-        Configure Supernote sync for a domain.
+    # Load all discovered plugins
+    if dynamic_loader:
+        logger.info("🔌 Loading plugins dynamically...")
+        results = dynamic_loader.load_all()
+        for plugin_name, success in results.items():
+            status = "✅" if success else "❌"
+            logger.info(f"  {status} {plugin_name}")
+    
+    # Now log all registered tools (core + plugins)
+    try:
+        has_tm = hasattr(mcp, '_tool_manager')
+        has_tools = has_tm and hasattr(mcp._tool_manager, '_tools')
         
-        Args:
-            domain: Domain name to configure
-            account: Storage account name (from storage_list_accounts)
-            subfolder: Subfolder name on Supernote (e.g., "burrillville")
-            sync_notes: Whether to sync .note files from device (default: True)
-            sync_documents: Whether to sync documents to device (default: True)
-            convert_to: Formats to convert .note files to (comma-separated: pdf,png)
-        """
-        return await _supernote.supernote_setup(domain, account, subfolder, sync_notes, sync_documents, convert_to)
-    
-    @mcp.tool()
-    async def supernote_status(domain: str) -> str:
-        """Show Supernote sync status for a domain."""
-        return await _supernote.supernote_status(domain)
-    
-    @mcp.tool()
-    async def supernote_pull(domain: str, convert: bool = True) -> str:
-        """
-        Pull .note files from Supernote (via cloud storage).
+        if has_tools:
+            tools = mcp._tool_manager._tools
+            tool_names = sorted(tools.keys())
+        else:
+            tool_names = []
+            logger.warning(f"Tool introspection failed")
         
-        Args:
-            domain: Domain name
-            convert: Whether to convert .note files to PDF/PNG (default: True)
-        """
-        return await _supernote.supernote_pull(domain, convert)
-    
-    @mcp.tool()
-    async def supernote_push(domain: str) -> str:
-        """Push documents to Supernote (via cloud storage)."""
-        return await _supernote.supernote_push(domain)
-    
-    @mcp.tool()
-    async def supernote_list_remote(domain: str, path_type: str = "notes") -> str:
-        """
-        List files in the remote Supernote folder.
+        logger.info(f"📋 Registered {len(tool_names)} MCP tools")
         
-        Args:
-            domain: Domain name
-            path_type: "notes" or "documents"
-        """
-        return await _supernote.supernote_list_remote(domain, path_type)
+        if not tool_names:
+            return
+        
+        # Group by prefix for cleaner output
+        groups = {}
+        for name in tool_names:
+            prefix = name.split('_')[0] if '_' in name else 'other'
+            if prefix not in groups:
+                groups[prefix] = []
+            groups[prefix].append(name)
+        
+        for prefix in sorted(groups.keys()):
+            tools_in_group = groups[prefix]
+            logger.info(f"  {prefix}: {', '.join(tools_in_group)}")
+            
+    except Exception as e:
+        logger.warning(f"Could not log tools: {e}")
+        import traceback
+        traceback.print_exc()
 
-    @mcp.tool()
-    async def supernote_list_notes(domain: str, include_processed: bool = False) -> str:
-        """
-        List available notes for a domain with their page counts.
-        
-        Args:
-            domain: Domain name
-            include_processed: Whether to show processed notes (default: False)
-        
-        Returns:
-            List of notes and their converted pages
-        """
-        return await _supernote.supernote_list_notes(domain, include_processed)
-    
-    @mcp.tool()
-    async def supernote_read_note(domain: str, note_stem: str):
-        """
-        Read all pages of a Supernote note as images.
-        
-        This returns the converted PNG pages as images that Claude can see
-        and interpret using vision. Use this to extract content from handwritten notes.
-        
-        Args:
-            domain: Domain name
-            note_stem: Note filename without extension (e.g., "20260116_140203")
-        
-        Returns:
-            List of Image objects (one per page) that Claude can see
-        """
-        return await _supernote.supernote_read_note(domain, note_stem)
-    
-    @mcp.tool()
-    async def supernote_read_page(domain: str, note_stem: str, page: int = 0):
-        """
-        Read a single page of a Supernote note as an image.
-        
-        Args:
-            domain: Domain name
-            note_stem: Note filename without extension (e.g., "20260116_140203")
-            page: Page number (0-indexed)
-        
-        Returns:
-            Image object that Claude can see
-        """
-        return await _supernote.supernote_read_page(domain, note_stem, page)
-    
-    @mcp.tool()
-    async def supernote_mark_processed(domain: str, note_stem: str) -> str:
-        """
-        Mark a note as processed by moving it to the processed folder.
-        
-        The .note file moves to processed/. Converted PNGs stay in converted/
-        for future reference.
-        
-        Args:
-            domain: Domain name
-            note_stem: Note filename without extension (e.g., "20260116_140203")
-        
-        Returns:
-            Confirmation message
-        """
-        return await _supernote.supernote_mark_processed(domain, note_stem)
-    
-    @mcp.tool()
-    async def supernote_unprocess(domain: str, note_stem: str) -> str:
-        """
-        Move a processed note back to pending.
-        
-        Args:
-            domain: Domain name
-            note_stem: Note filename without extension
-        
-        Returns:
-            Confirmation message
-        """
-        return await _supernote.supernote_unprocess(domain, note_stem)
+# Load plugins and log at module load time
+load_plugins_and_log()
 
 # MAIN
 # =============================================================================
