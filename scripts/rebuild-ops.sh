@@ -1,13 +1,10 @@
 #!/bin/bash
 # =============================================================================
-# Rebuild Super Claude Container
+# Rebuild Super Claude Ops Container
 # =============================================================================
-# Rebuilds from git-tracked source in /data/mcps/super-claude/
+# Rebuilds from git-tracked source in /data/mcps/ops/
 #
-# Usage: ./rebuild-super-claude.sh [--no-cache]
-#
-# This builds the image and restarts the container with the same
-# configuration that's been working (direct port exposure on 8000)
+# Usage: ./rebuild-ops.sh [--no-cache]
 # =============================================================================
 
 set -e
@@ -16,14 +13,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DATA_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$DATA_DIR"
 
-LOG="$DATA_DIR/temp/rebuild.log"
+LOG="$DATA_DIR/temp/rebuild-ops.log"
 NETWORK="super-claude_super-claude-net"
 
 # Parse args
 NO_CACHE=""
 if [ "$1" = "--no-cache" ]; then
     NO_CACHE="--no-cache"
-    echo "🔨 Rebuilding with --no-cache"
+    echo "🔧 Rebuilding with --no-cache"
 fi
 
 # Ensure temp dir exists
@@ -35,12 +32,12 @@ log() {
 
 # Clear previous log
 echo "" > "$LOG"
-log "🔨 Starting Super Claude rebuild..."
-log "   Source: $DATA_DIR/mcps/super-claude/"
+log "🔧 Starting Super Claude Ops rebuild..."
+log "   Source: $DATA_DIR/mcps/ops/"
 
 # Step 1: Build new image
 log "1️⃣ Building image..."
-if docker build $NO_CACHE -t super-claude -f mcps/super-claude/Dockerfile . >> "$LOG" 2>&1; then
+if docker build $NO_CACHE -t super-claude-ops -f mcps/ops/Dockerfile . >> "$LOG" 2>&1; then
     log "   ✅ Image built"
 else
     log "   ❌ Build failed - check $LOG"
@@ -49,21 +46,21 @@ fi
 
 # Step 2: Stop and remove old container
 log "2️⃣ Stopping old container..."
-docker stop super-claude >> "$LOG" 2>&1 || true
-docker rm super-claude >> "$LOG" 2>&1 || true
+docker stop super-claude-ops >> "$LOG" 2>&1 || true
+docker rm super-claude-ops >> "$LOG" 2>&1 || true
 log "   ✅ Stopped and removed"
 
 # Step 3: Start new container
 log "3️⃣ Starting new container..."
 if docker run -d \
-    --name super-claude \
+    --name super-claude-ops \
     --network "$NETWORK" \
     --env-file "$DATA_DIR/config/.env" \
-    -p 8000:8000 \
+    -p 8001:8001 \
     -v /volume1/docker/super-claude:/data \
     -v /var/run/docker.sock:/var/run/docker.sock \
     --restart unless-stopped \
-    super-claude >> "$LOG" 2>&1; then
+    super-claude-ops >> "$LOG" 2>&1; then
     log "   ✅ Started"
 else
     log "   ❌ Run failed - check $LOG"
@@ -71,10 +68,8 @@ else
 fi
 
 log ""
-log "✅ Super Claude rebuilt successfully!"
+log "✅ Super Claude Ops rebuilt successfully!"
 log ""
-log "Container: super-claude"
-log "Port: 8000"
-log "MCP endpoint: http://localhost:8000/mcp"
-log ""
-log "⚠️  Start a new Claude chat to reconnect"
+log "Container: super-claude-ops"
+log "Port: 8001"
+log "MCP endpoint: http://localhost:8001/ops"

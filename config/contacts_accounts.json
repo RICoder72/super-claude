@@ -1,0 +1,11 @@
+{
+  "accounts": {
+    "personal": {
+      "adapter": "gcontacts",
+      "credentials_ref": "",
+      "config": {
+        "token_path": "/data/config/gcontacts_token.json"
+      }
+    }
+  }
+}
