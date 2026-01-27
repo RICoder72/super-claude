@@ -1960,6 +1960,117 @@ async def plugin_list_external() -> str:
     return "\n".join(lines)
 
 # =============================================================================
+# DEVELOPMENT TOOLS
+# =============================================================================
+@mcp.tool()
+def dev_sync(target: str = "super-claude") -> str:
+    """
+    Quick sync files into running container for development iteration.
+    Copies source files and restarts container WITHOUT full rebuild.
+    
+    Args:
+        target: Which container to sync - "super-claude", "ops", or "both"
+    
+    Note: Changes are temporary until proper rebuild! Use for quick testing.
+    After testing, do git commit + rebuild for permanent changes.
+    """
+    results = []
+    
+    if target in ["super-claude", "both"]:
+        results.append("📦 Syncing super-claude...")
+        
+        # Copy core files
+        copies = [
+            ("mcps/super-claude/server.py", "super-claude:/app/server.py"),
+            ("mcps/super-claude/plugins/.", "super-claude:/app/plugins/"),
+            ("mcps/super-claude/core/.", "super-claude:/app/core/"),
+            ("mcps/super-claude/services/.", "super-claude:/app/services/"),
+            ("shared/.", "super-claude:/app/shared/"),
+        ]
+        
+        for src, dest in copies:
+            src_path = SUPER_CLAUDE_ROOT / src.rstrip("/.")
+            if src_path.exists():
+                success, output = _run_command(f"docker cp /data/{src} {dest}")
+                if not success:
+                    results.append(f"   ⚠️ Failed to copy {src}: {output}")
+        
+        results.append("   ✅ Files synced")
+        
+        # Restart container
+        success, output = _run_command("docker restart super-claude", timeout=30)
+        if success:
+            results.append("   ✅ Container restarted")
+        else:
+            results.append(f"   ❌ Restart failed: {output}")
+    
+    if target in ["ops", "both"]:
+        results.append("🔧 Syncing super-claude-ops...")
+        
+        copies = [
+            ("mcps/ops/server.py", "super-claude-ops:/app/server.py"),
+            ("shared/.", "super-claude-ops:/app/shared/"),
+        ]
+        
+        for src, dest in copies:
+            src_path = SUPER_CLAUDE_ROOT / src.rstrip("/.")
+            if src_path.exists():
+                success, output = _run_command(f"docker cp /data/{src} {dest}")
+                if not success:
+                    results.append(f"   ⚠️ Failed to copy {src}: {output}")
+        
+        results.append("   ✅ Files synced")
+        
+        success, output = _run_command("docker restart super-claude-ops", timeout=30)
+        if success:
+            results.append("   ✅ Container restarted")
+        else:
+            results.append(f"   ❌ Restart failed: {output}")
+    
+    results.append("")
+    results.append("⚠️  Remember:")
+    results.append("   • Changes are TEMPORARY until proper rebuild")
+    results.append("   • Start a new chat to reconnect")
+    results.append("   • When done testing: git commit + rebuild script")
+    
+    return "\n".join(results)
+
+@mcp.tool()
+def build_help() -> str:
+    """Get help on building, deploying, and developing Super Claude containers."""
+    readme_path = SUPER_CLAUDE_ROOT / "scripts" / "README.md"
+    if readme_path.exists():
+        return readme_path.read_text()
+    
+    # Fallback if README doesn't exist
+    return """# Super Claude Build Help
+
+## Quick Commands
+
+| Task | Command |
+|------|---------|
+| Quick sync during dev | `dev_sync("super-claude")` or `./scripts/dev-sync.sh` |
+| Full rebuild main | `./scripts/rebuild-super-claude.sh` |
+| Full rebuild ops | `rebuild_ops()` or `./scripts/rebuild-ops.sh` |
+| Rebuild both | `./scripts/rebuild-all.sh` |
+
+## Key Concept
+
+Code is COPIED into containers at build time. Edit files in `/data/mcps/`,
+then either:
+- Quick test: `dev_sync()` (temporary, fast)
+- Finalize: `git commit` + rebuild script (permanent)
+
+## Mutual Administration
+
+- From super-claude: `rebuild_ops()` rebuilds ops container
+- From ops: `rebuild_super_claude()` rebuilds main container
+- You're never locked out!
+
+See /data/scripts/README.md for full documentation.
+"""
+
+# =============================================================================
 # OPS MANAGEMENT
 # =============================================================================
 @mcp.tool()
@@ -1999,41 +2110,6 @@ def rebuild_ops() -> str:
     steps.append("⚠️  Remember: Disconnect and reconnect the Ops connector, then start a new chat.")
     
     return "\n".join(steps)
-
-@mcp.tool()
-def build_help() -> str:
-    """Get help on building, deploying, and developing Super Claude containers."""
-    readme_path = SUPER_CLAUDE_ROOT / "scripts" / "README.md"
-    if readme_path.exists():
-        return readme_path.read_text()
-    
-    # Fallback if README doesn't exist
-    return """# Super Claude Build Help
-
-## Quick Commands
-
-| Task | Command |
-|------|---------|
-| Quick sync during dev | `./scripts/dev-sync.sh super-claude` |
-| Full rebuild main | `./scripts/rebuild-super-claude.sh` |
-| Full rebuild ops | `./scripts/rebuild-ops.sh` |
-| Rebuild both | `./scripts/rebuild-all.sh` |
-
-## From MCP Tools
-
-- `rebuild_ops()` - Rebuild ops container (from super-claude)
-- `rebuild_super_claude()` - Rebuild main container (from ops)
-- `plugin_reload_changed()` - Hot-reload modified plugins (no rebuild needed)
-
-## Key Concept
-
-Code is COPIED into containers at build time. Edit files in `/data/mcps/super-claude/`,
-then either:
-- Quick test: `./scripts/dev-sync.sh` (temporary)
-- Finalize: `./scripts/rebuild-super-claude.sh` (permanent)
-
-See /data/scripts/README.md for full documentation.
-"""
 
 # STARTUP LOGGING AND PLUGIN LOADING
 # =============================================================================

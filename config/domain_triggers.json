@@ -160,7 +160,7 @@
     ]
   },
   "super-claude": {
-    "description": "Super Claude DEVELOPMENT - building/maintaining this MCP infrastructure (not general Super Claude usage)",
+    "description": "Super Claude DEVELOPMENT - building/maintaining this MCP infrastructure",
     "triggers": [
       "super claude",
       "super-claude",
@@ -171,7 +171,16 @@
       "synology",
       "nas",
       "1password",
-      "oauth"
+      "oauth",
+      "rebuild",
+      "deploy",
+      "plugin",
+      "dockerfile",
+      "server.py",
+      "fastmcp",
+      "dynamic loader",
+      "dev sync",
+      "build help"
     ]
   }
 }
