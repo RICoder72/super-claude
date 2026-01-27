@@ -32,15 +32,21 @@ Container /app/              Copy of code inside container
 
 ### Option 1: Quick Iteration (Recommended for active development)
 
-When you're actively editing code:
+When you're actively editing code, use one of these methods:
 
-```bash
-# Edit files in /data/mcps/super-claude/
-# Then sync without full rebuild:
-./scripts/dev-sync.sh super-claude
-
-# Start new Claude chat to reconnect
+**From Claude (MCP tools):**
 ```
+dev_sync("super-claude")  # Sync and restart main container
+dev_sync("ops")           # Sync and restart ops container
+dev_sync("both")          # Sync both
+```
+
+**From shell:**
+```bash
+./scripts/dev-sync.sh super-claude
+```
+
+Then start a new Claude chat to reconnect.
 
 **Pros**: Fast (seconds vs minutes)
 **Cons**: Changes lost on container restart, dependencies not updated
@@ -64,15 +70,15 @@ When changes are done or you've added new dependencies:
 
 ### Option 3: From Claude (MCP Tools)
 
-You can also rebuild from within a Claude conversation:
+All build operations are available as MCP tools:
 
-```
-# From super-claude, rebuild ops:
-rebuild_ops()
-
-# From super-claude-ops, rebuild main:
-rebuild_super_claude()
-```
+| Tool | Container | Purpose |
+|------|-----------|---------|
+| `dev_sync("super-claude")` | super-claude | Quick sync for testing |
+| `dev_sync("ops")` | super-claude | Quick sync ops |
+| `rebuild_ops()` | super-claude | Full rebuild of ops |
+| `rebuild_super_claude()` | super-claude-ops | Full rebuild of main |
+| `build_help()` | both | Show this documentation |
 
 ## Mutual Administration
 
