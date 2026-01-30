@@ -22,11 +22,38 @@ class OnePasswordPlugin(SuperClaudePlugin):
     def initialize(self) -> None:
         """Initialize the 1Password plugin."""
         self.metadata = {
-            "name": "onepassword",
+            "name": "op_auth",
             "version": "0.2.0",
-            "description": "Authentication and secret management via 1Password",
+            "description": "Infrastructure secret management via 1Password. For API keys, OAuth tokens, and service credentials that Claude needs to call external services.",
             "author": "Matthew",
-            "requires": ["1Password service account token"]
+            "requires": ["1Password service account token"],
+            
+            # Recognition triggers
+            "triggers": [
+                "secret",
+                "credential",
+                "API key",
+                "token",
+                "1Password",
+                "need the password for",
+                "get the key for",
+                "OAuth token",
+                "service account"
+            ],
+            
+            # Common workflows
+            "workflows": {
+                "get_api_key": "auth_get(item_name) - retrieves credential field by default",
+                "get_specific_field": "auth_get(item_name, field=api_key) - for non-standard field names",
+                "store_new_credential": "auth_set(title, JSON_fields_string)"
+            },
+            
+            # Anti-patterns
+            "anti_patterns": [
+                "Don't ask the user for API keys or tokens - use auth_get to retrieve them",
+                "Don't hardcode credentials - always use auth_get",
+                "Don't confuse with user_secrets - op_auth is for INFRASTRUCTURE (things Claude needs), user_secrets is for USER data"
+            ]
         }
         
         # Register tools

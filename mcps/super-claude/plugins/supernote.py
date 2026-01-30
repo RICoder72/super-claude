@@ -71,9 +71,44 @@ class SupernotePlugin(SuperClaudePlugin):
         self.metadata = {
             "name": "supernote",
             "version": "1.0.0",
-            "description": "Streamlined Supernote sync with two-phase workflow",
+            "description": "Bidirectional sync with Supernote device via cloud storage. Pull handwritten notes, process with vision, send documents back.",
             "author": "Matthew",
-            "requires": []
+            "requires": [],
+            
+            # Recognition: keywords/phrases that suggest this plugin is relevant
+            "triggers": [
+                "supernote",
+                "handwritten notes",
+                "stylus notes",
+                "e-ink notes",
+                "pen notes",
+                "meeting notes",  # when context suggests handwritten
+                "annotations",
+                ".note files",
+                ".mark files",
+                "send to my device",
+                "push to supernote",
+                "notes from my tablet"
+            ],
+            
+            # Common multi-step patterns
+            "workflows": {
+                "check_for_new_notes": "supernote_pull(domain) → supernote_list_unprocessed(domain)",
+                "process_a_note": "supernote_list_unprocessed → supernote_process_note(domain, stem) → [review content] → supernote_mark_note_processed(domain, stem)",
+                "process_annotations": "supernote_list_unprocessed → supernote_process_annotation(domain, stem) → [review] → supernote_mark_annotation_processed(domain, stem)",
+                "send_document_to_device": "supernote_md2pdf(domain, source, to_outbox=True) → supernote_push(domain)",
+                "full_sync_cycle": "supernote_pull → supernote_list_unprocessed → [process each] → supernote_push"
+            },
+            
+            # What NOT to do when this plugin applies
+            "anti_patterns": [
+                "Don't manually read from domains/*/plugins/supernote/inbox/ - use supernote_list_unprocessed and supernote_process_note",
+                "Don't ask user to manually move files to their device - use supernote_md2pdf + supernote_push",
+                "Don't ask 'do you have notes on X?' without first running supernote_list_unprocessed to check",
+                "Don't use fs_read on .note or .mark files - they're binary; use the supernote_process_* tools",
+                "Don't skip supernote_pull - always pull first to get latest from device before listing unprocessed",
+                "Don't forget to mark notes processed after reviewing - otherwise they stay in inbox forever"
+            ]
         }
         self.tools = {
             # Setup & Status

@@ -17,6 +17,13 @@
 - For full docs: `build_help()` tool or `/data/scripts/README.md`
 - Both MCPs can rebuild each other (mutual administration)
 
+### Build Safety
+- Containers build from git-tracked code in `/data/mcps/`
+- This means we can always roll back to a known state
+- Uncommitted changes are visible via `git_status()` before rebuild
+- If something breaks, the previous committed version is recoverable
+- Always commit working code before making risky changes
+
 ## Document Preferences
 - Work in markdown (.md) by default
 - Keep markdown ASCII-safe:
@@ -38,6 +45,36 @@
 When no domain is loaded and the user asks about mail/calendar/contacts:
 - Use `personal` account for mail, calendar, contacts
 - Ask if unclear which account to use
+
+## Plugin Usage Protocol
+
+### Recognition
+When you see plugin trigger keywords (shown in session_start output), that's a signal to use that plugin. Each plugin declares:
+- **Triggers**: Keywords/phrases that indicate the plugin is relevant
+- **Workflows**: Common multi-step patterns
+- **Anti-patterns**: Things NOT to do when the plugin applies
+
+### Protocol
+1. When user mentions something that sounds like a plugin trigger, call `plugin_get_usage(plugin_name)` to load the full guidance
+2. Follow the documented workflows - don't improvise manual approaches
+3. If you catch yourself doing something that might be an anti-pattern, stop and check
+
+### Core Principle
+If a plugin exists for a task, use it. Don't reach for fs_read/fs_write/shell_exec when a purpose-built plugin tool handles it better.
+
+### Lessons Learned
+Add to this list as we discover missed use cases:
+
+**Supernote**
+- "handwritten notes", "meeting notes from tablet", "Supernote" -> use supernote_* tools
+- "my notes" when domain has Supernote configured -> check supernote_list_unprocessed first
+- "send this to my Supernote/tablet" -> supernote_md2pdf + supernote_push (don't ask user to move files)
+- Always follow full workflow: pull -> list_unprocessed -> process -> mark_processed
+- Don't read from plugins/supernote/inbox/ directly - use the process tools
+
+**Secrets**
+- Need credentials/API keys for infrastructure -> auth_get (never ask user)
+- User wants to store a password for their own reference -> user_secrets plugin (not auth)
 
 ## Communication
 - Concise responses preferred

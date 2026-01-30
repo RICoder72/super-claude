@@ -407,21 +407,29 @@ def _get_tool_inventory() -> str:
         lines.append("  • `contacts_list/search/get/create(account, ...)`")
         lines.append("")
     
-    # Plugin Tools
+    # Plugin Tools with Triggers
     if PLUGINS_AVAILABLE and dynamic_loader:
-        lines.append("🔌 **Plugins**")
+        lines.append("🔌 **Plugins** (use `plugin_get_usage(name)` for detailed workflows)")
         lines.append("")
         for name, plugin in dynamic_loader.plugins.items():
             if hasattr(plugin, 'metadata') and hasattr(plugin, 'tools'):
                 version = plugin.metadata.get('version', '?')
-                desc = plugin.metadata.get('description', '')
-                tool_names = list(plugin.tools.keys())
-                lines.append(f"**{name}** v{version}" + (f" - {desc}" if desc else ""))
-                # Show key tools (not all)
-                if len(tool_names) > 5:
-                    lines.append(f"  • Key tools: {', '.join(tool_names[:5])}...")
+                desc = plugin.metadata.get('description', '')[:60]
+                
+                # Get trigger summary
+                triggers = plugin.metadata.get('triggers', [])
+                if triggers:
+                    trigger_preview = ", ".join(triggers[:4])
+                    if len(triggers) > 4:
+                        trigger_preview += f", +{len(triggers)-4} more"
+                    trigger_str = f"triggers: [{trigger_preview}]"
                 else:
-                    lines.append(f"  • Tools: {', '.join(tool_names)}")
+                    trigger_str = "⚠️ no triggers defined"
+                
+                lines.append(f"**{name}** v{version}")
+                if desc:
+                    lines.append(f"  {desc}")
+                lines.append(f"  {trigger_str}")
                 lines.append("")
     
     # Plugin Management
@@ -1030,6 +1038,34 @@ if PLUGINS_AVAILABLE:
                 return f"✅ Unloaded plugin: {plugin_name}"
             return f"❌ Failed to unload plugin: {plugin_name}"
         return "❌ Plugin system not initialized"
+    
+    @mcp.tool()
+    def plugin_get_usage(plugin_name: str) -> str:
+        """
+        Get detailed usage guide for a plugin.
+        
+        Returns triggers (when to use), workflows (common patterns),
+        and anti-patterns (what NOT to do) for the specified plugin.
+        
+        Args:
+            plugin_name: Name of the plugin (e.g., "supernote", "op_auth")
+        """
+        if not dynamic_loader:
+            return "❌ Plugin system not initialized"
+        
+        if plugin_name not in dynamic_loader.plugins:
+            available = ", ".join(dynamic_loader.plugins.keys())
+            return f"❌ Plugin '{plugin_name}' not found. Available: {available}"
+        
+        plugin = dynamic_loader.plugins[plugin_name]
+        
+        # Use the plugin's get_usage method if available
+        if hasattr(plugin, 'get_usage'):
+            return plugin.get_usage()
+        
+        # Fallback to basic info
+        meta = plugin.metadata if hasattr(plugin, 'metadata') else {}
+        return f"Plugin: {meta.get('name', plugin_name)}\n{meta.get('description', 'No description')}"
 
 # =============================================================================
 # STORAGE TOOLS (Cloud Storage with Named Accounts)

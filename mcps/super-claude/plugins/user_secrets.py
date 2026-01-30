@@ -52,9 +52,38 @@ class UserSecretsPlugin(SuperClaudePlugin):
         self.metadata = {
             "name": "user_secrets",
             "version": "1.0.0",
-            "description": "User-facing password and credential storage",
+            "description": "User-facing password and credential storage. For storing the USER's passwords - firewall logins, vendor credentials, system passwords they want to save.",
             "author": "Matthew",
-            "requires": []
+            "requires": [],
+            
+            # Recognition triggers
+            "triggers": [
+                "store password",
+                "save password",
+                "save login",
+                "remember credential",
+                "keep this somewhere safe",
+                "what's the password for",
+                "firewall login",
+                "vendor credentials",
+                "store this securely",
+                "my passwords"
+            ],
+            
+            # Common workflows
+            "workflows": {
+                "list_accounts": "secrets_list_accounts() - see configured password vaults",
+                "save_password": "secrets_set(account, item_name, password, username=..., url=...)",
+                "find_password": "secrets_list(account, search='keyword') or secrets_get(account, item_name)",
+                "setup_new_vault": "secrets_add_account(name, vault='Vault Name')"
+            },
+            
+            # Anti-patterns  
+            "anti_patterns": [
+                "Don't confuse with op_auth - user_secrets is for the USER's passwords, op_auth is for infrastructure/API credentials",
+                "Don't store API keys here - use op_auth for those",
+                "Don't forget to specify the account parameter - user may have multiple password vaults"
+            ]
         }
         
         self.tools = {
