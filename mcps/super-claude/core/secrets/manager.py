@@ -77,6 +77,11 @@ class SecretsManager:
             self._config = DEFAULT_CONFIG
             self._loaded = True
     
+    def _resolve_backend_name(self, backend: Optional[str] = None) -> str:
+        """Resolve backend name, ensuring config is loaded first."""
+        self._load_config()
+        return backend or self._default_backend
+
     def _get_backend(self, name: str) -> SecretsBackend:
         """Get or create a backend instance."""
         self._load_config()
@@ -115,7 +120,7 @@ class SecretsManager:
         Returns:
             The secret value
         """
-        backend_name = backend or self._default_backend
+        backend_name = self._resolve_backend_name(backend)
         backend_instance = self._get_backend(backend_name)
         return await backend_instance.get(item, field)
     
@@ -140,7 +145,7 @@ class SecretsManager:
                         backend = name
                         break
         
-        backend_name = backend or self._default_backend
+        backend_name = self._resolve_backend_name(backend)
         backend_instance = self._get_backend(backend_name)
         return await backend_instance.get_ref(reference)
     
@@ -165,7 +170,7 @@ class SecretsManager:
         Returns:
             Created SecretItem
         """
-        backend_name = backend or self._default_backend
+        backend_name = self._resolve_backend_name(backend)
         backend_instance = self._get_backend(backend_name)
         return await backend_instance.set(title, fields, category, notes)
     
@@ -184,7 +189,7 @@ class SecretsManager:
         Returns:
             List of item names
         """
-        backend_name = backend or self._default_backend
+        backend_name = self._resolve_backend_name(backend)
         backend_instance = self._get_backend(backend_name)
         return await backend_instance.list(prefix)
     
@@ -203,7 +208,7 @@ class SecretsManager:
         Returns:
             True if exists
         """
-        backend_name = backend or self._default_backend
+        backend_name = self._resolve_backend_name(backend)
         backend_instance = self._get_backend(backend_name)
         return await backend_instance.exists(item)
     
