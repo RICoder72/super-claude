@@ -33,9 +33,12 @@ from plugin_base import SuperClaudePlugin
 
 try:
     from fastmcp.utilities.types import Image
+    from mcp.types import TextContent, ImageContent
     IMAGE_SUPPORT = True
 except ImportError:
     IMAGE_SUPPORT = False
+    TextContent = None
+    ImageContent = None
 
 try:
     import fitz
@@ -47,9 +50,9 @@ try:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.units import inch
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Flowable
     REPORTLAB_AVAILABLE = True
 except ImportError:
     REPORTLAB_AVAILABLE = False
@@ -646,12 +649,18 @@ class SupernotePlugin(SuperClaudePlugin):
         if not pages:
             return f"❌ Note '{note_stem}' not found in inbox"
         
-        result = [f"📝 **Note: {note_stem}** ({len(pages)} pages)\n\nReview and describe the content:\n"]
-        for i, p in enumerate(pages):
-            result.append(f"\n**Page {i+1}:**")
-            result.append(Image(path=p))
+        # Build result as proper MCP ContentBlock types
+        # This avoids fastmcp serialization issues with mixed lists
+        result = []
+        result.append(TextContent(type="text", text=f"📝 **Note: {note_stem}** ({len(pages)} pages)\n\nReview and describe the content:\n"))
         
-        result.append(f'\n---\nWhen done: `supernote_mark_note_processed("{domain}", "{note_stem}")`')
+        for i, p in enumerate(pages):
+            result.append(TextContent(type="text", text=f"\n**Page {i+1}:**"))
+            # Convert Image to ImageContent directly
+            img = Image(path=p)
+            result.append(img.to_image_content())
+        
+        result.append(TextContent(type="text", text=f'\n---\nWhen done: `supernote_mark_note_processed("{domain}", "{note_stem}")`'))
         return result
 
     async def supernote_process_annotation(self, domain: str, doc_stem: str) -> Union[List[Any], str]:
@@ -673,12 +682,17 @@ class SupernotePlugin(SuperClaudePlugin):
         if not pages:
             return f"❌ Annotation '{doc_stem}' not found in inbox"
         
-        result = [f"✏️ **Annotation: {doc_stem}** ({len(pages)} pages)\n\nReview what was marked up:\n"]
-        for i, p in enumerate(pages):
-            result.append(f"\n**Page {i+1}:**")
-            result.append(Image(path=p))
+        # Build result as proper MCP ContentBlock types
+        result = []
+        result.append(TextContent(type="text", text=f"✏️ **Annotation: {doc_stem}** ({len(pages)} pages)\n\nReview what was marked up:\n"))
         
-        result.append(f'\n---\nWhen done: `supernote_mark_annotation_processed("{domain}", "{doc_stem}")`')
+        for i, p in enumerate(pages):
+            result.append(TextContent(type="text", text=f"\n**Page {i+1}:**"))
+            # Convert Image to ImageContent directly
+            img = Image(path=p)
+            result.append(img.to_image_content())
+        
+        result.append(TextContent(type="text", text=f'\n---\nWhen done: `supernote_mark_annotation_processed("{domain}", "{doc_stem}")`'))
         return result
 
     async def supernote_mark_note_processed(self, domain: str, note_stem: str) -> str:
@@ -807,6 +821,36 @@ class SupernotePlugin(SuperClaudePlugin):
             return f"❌ Failed: {e}"
 
     @staticmethod
+    def _build_ruled_space(width: float, num_lines: int = 4, line_spacing: float = None) -> 'Flowable':
+        """Build a ruled annotation space for handwriting on Supernote.
+        
+        Returns a Flowable that draws light gray ruled lines.
+        Args:
+            width: Available width in points
+            num_lines: Number of ruled lines to draw (default 4)
+            line_spacing: Points between lines (default 22 — good for stylus)
+        """
+        if line_spacing is None:
+            line_spacing = 22
+        
+        class RuledAnnotationSpace(Flowable):
+            def __init__(self, w, n, spacing):
+                Flowable.__init__(self)
+                self.width = w
+                self.num_lines = n
+                self.line_spacing = spacing
+                self.height = n * spacing + 6  # small top/bottom padding
+            
+            def draw(self):
+                self.canv.setStrokeColor(colors.HexColor('#cccccc'))
+                self.canv.setLineWidth(0.5)
+                for i in range(self.num_lines):
+                    y = self.height - 6 - (i * self.line_spacing)
+                    self.canv.line(0, y, self.width, y)
+        
+        return RuledAnnotationSpace(width, num_lines, line_spacing)
+
+    @staticmethod
     def _parse_markdown_table(lines: List[str]) -> List[List[str]]:
         rows = []
         for line in lines:
@@ -818,7 +862,18 @@ class SupernotePlugin(SuperClaudePlugin):
         return rows
 
     def _convert_md_to_pdf(self, md_path: Path, pdf_path: Path = None) -> Path:
-        """Convert markdown to PDF optimized for Supernote display."""
+        """Convert markdown to PDF optimized for Supernote display.
+        
+        Supports:
+            - # / ## / ### headings
+            - **bold** text
+            - Markdown tables
+            - `- [ ]` / `- [x]` checkboxes (with nesting via indentation)
+            - `<!-- pagebreak -->` forced page breaks
+            - `<!-- space -->` ruled annotation lines for handwriting
+            - `<!-- space:N -->` ruled annotation lines with N lines (default 4)
+            - `---` horizontal rule / section separator
+        """
         if pdf_path is None:
             pdf_path = md_path.with_suffix('.pdf')
         
@@ -826,6 +881,7 @@ class SupernotePlugin(SuperClaudePlugin):
         lines = content.split('\n')
         
         # Supernote-optimized margins (0.75" for safe pen area)
+        available_width = 7.0 * inch  # letter width minus margins
         doc = SimpleDocTemplate(
             str(pdf_path), pagesize=letter,
             rightMargin=0.75*inch, leftMargin=0.75*inch,
@@ -837,24 +893,144 @@ class SupernotePlugin(SuperClaudePlugin):
         title_style = ParagraphStyle('T', parent=styles['Title'], fontSize=20, alignment=TA_CENTER, spaceAfter=18)
         h2_style = ParagraphStyle('H2', parent=styles['Heading2'], fontSize=16, spaceBefore=16, spaceAfter=8)
         h3_style = ParagraphStyle('H3', parent=styles['Heading3'], fontSize=14, spaceBefore=12, spaceAfter=6)
+        h4_style = ParagraphStyle('H4', parent=styles['Heading4'], fontSize=12, spaceBefore=10, spaceAfter=4)
         normal_style = ParagraphStyle('N', parent=styles['Normal'], fontSize=12, spaceAfter=8, leading=16)
+        
+        # Checkbox styles with indentation levels
+        checkbox_style = ParagraphStyle(
+            'CB0', parent=styles['Normal'], fontSize=12, spaceAfter=4, leading=18,
+            leftIndent=0
+        )
+        checkbox_style_l1 = ParagraphStyle(
+            'CB1', parent=styles['Normal'], fontSize=11, spaceAfter=3, leading=16,
+            leftIndent=18
+        )
+        checkbox_style_l2 = ParagraphStyle(
+            'CB2', parent=styles['Normal'], fontSize=11, spaceAfter=3, leading=16,
+            leftIndent=36
+        )
+        
+        # Bullet style (non-checkbox list items)
+        bullet_style = ParagraphStyle(
+            'BL0', parent=styles['Normal'], fontSize=12, spaceAfter=4, leading=18,
+            leftIndent=0
+        )
+        bullet_style_l1 = ParagraphStyle(
+            'BL1', parent=styles['Normal'], fontSize=11, spaceAfter=3, leading=16,
+            leftIndent=18
+        )
         
         story = []
         i = 0
         
+        # Regex for checkbox lines: optional leading whitespace, then - [ ] or - [x]
+        checkbox_re = re.compile(r'^(\s*)- \[([ xX])\]\s*(.*)')
+        # Regex for annotation space directive with optional line count
+        space_re = re.compile(r'^\s*<!--\s*space(?::(\d+))?\s*-->\s*$')
+        # Regex for pagebreak directive
+        pagebreak_re = re.compile(r'^\s*<!--\s*pagebreak\s*-->\s*$')
+        # Regex for plain list items (non-checkbox)
+        bullet_re = re.compile(r'^(\s*)[-*]\s+(.*)')
+        
         while i < len(lines):
-            line = lines[i].strip()
-            if not line or line.startswith('>') or line == '---':
+            raw_line = lines[i]
+            line = raw_line.strip()
+            
+            # Empty lines — skip
+            if not line:
                 i += 1
                 continue
             
+            # Block quotes — skip
+            if line.startswith('>'):
+                i += 1
+                continue
+            
+            # Pagebreak directive
+            if pagebreak_re.match(line):
+                story.append(PageBreak())
+                i += 1
+                continue
+            
+            # Annotation space directive
+            space_match = space_re.match(line)
+            if space_match:
+                num_lines = int(space_match.group(1)) if space_match.group(1) else 4
+                story.append(self._build_ruled_space(available_width, num_lines))
+                i += 1
+                continue
+            
+            # Horizontal rule — render as a thin line with spacing
+            if line == '---' or line == '***' or line == '___':
+                story.append(Spacer(1, 8))
+                story.append(self._build_ruled_space(available_width, 1, 1))
+                story.append(Spacer(1, 8))
+                i += 1
+                continue
+            
+            # Headings
+            if line.startswith('#### '):
+                text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line[5:])
+                story.append(Paragraph(text, h4_style))
+                i += 1
+                continue
+            if line.startswith('### '):
+                text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line[4:])
+                story.append(Paragraph(text, h3_style))
+                i += 1
+                continue
+            if line.startswith('## '):
+                text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line[3:])
+                story.append(Paragraph(text, h2_style))
+                i += 1
+                continue
             if line.startswith('# '):
-                story.append(Paragraph(line[2:], title_style))
-            elif line.startswith('## '):
-                story.append(Paragraph(line[3:], h2_style))
-            elif line.startswith('### '):
-                story.append(Paragraph(line[4:], h3_style))
-            elif line.startswith('|'):
+                text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line[2:])
+                story.append(Paragraph(text, title_style))
+                i += 1
+                continue
+            
+            # Checkbox items
+            cb_match = checkbox_re.match(raw_line)
+            if cb_match:
+                indent = len(cb_match.group(1))
+                checked = cb_match.group(2) in ('x', 'X')
+                text = cb_match.group(3)
+                
+                # Apply bold/formatting
+                text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+                text = re.sub(r'`(.+?)`', r'<font face="Courier">\1</font>', text)
+                
+                # Checkbox symbol
+                box = '☑' if checked else '☐'
+                
+                # Pick style based on indentation depth
+                if indent >= 4:
+                    style = checkbox_style_l2
+                elif indent >= 2:
+                    style = checkbox_style_l1
+                else:
+                    style = checkbox_style
+                
+                story.append(Paragraph(f'{box}  {text}', style))
+                i += 1
+                continue
+            
+            # Plain list items (non-checkbox)
+            bl_match = bullet_re.match(raw_line)
+            if bl_match:
+                indent = len(bl_match.group(1))
+                text = bl_match.group(2)
+                text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+                text = re.sub(r'`(.+?)`', r'<font face="Courier">\1</font>', text)
+                
+                style = bullet_style_l1 if indent >= 2 else bullet_style
+                story.append(Paragraph(f'•  {text}', style))
+                i += 1
+                continue
+            
+            # Tables
+            if line.startswith('|'):
                 table_lines = []
                 while i < len(lines) and lines[i].strip().startswith('|'):
                     table_lines.append(lines[i])
@@ -863,7 +1039,7 @@ class SupernotePlugin(SuperClaudePlugin):
                 rows = self._parse_markdown_table(table_lines)
                 if rows:
                     num_cols = len(rows[0])
-                    t = Table(rows, colWidths=[7.0*inch/num_cols]*num_cols)
+                    t = Table(rows, colWidths=[available_width/num_cols]*num_cols)
                     t.setStyle(TableStyle([
                         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
                         ('FONTSIZE', (0,0), (-1,-1), 10),
@@ -873,9 +1049,13 @@ class SupernotePlugin(SuperClaudePlugin):
                     ]))
                     story.append(t)
                     story.append(Spacer(1, 10))
-            else:
-                line = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line)
-                story.append(Paragraph(line, normal_style))
+                i += 1
+                continue
+            
+            # Regular paragraph text
+            line = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line)
+            line = re.sub(r'`(.+?)`', r'<font face="Courier">\1</font>', line)
+            story.append(Paragraph(line, normal_style))
             i += 1
         
         doc.build(story)

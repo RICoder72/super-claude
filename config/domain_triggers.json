@@ -159,6 +159,22 @@
       "taoism"
     ]
   },
+  "somnia": {
+    "description": "Graph-based memory and continuity system for Claude - eventually replaces Super Claude",
+    "triggers": [
+      "somnia",
+      "memory system",
+      "dream state",
+      "consolidation",
+      "graph memory",
+      "continuity",
+      "sleep cycle",
+      "wakeup",
+      "dream log",
+      "memory graph",
+      "claude memory"
+    ]
+  },
   "super-claude": {
     "description": "Super Claude DEVELOPMENT - building/maintaining this MCP infrastructure",
     "triggers": [
