@@ -11,6 +11,7 @@ import subprocess
 import json
 from pathlib import Path
 from datetime import datetime
+import sqlite3
 import sys
 import logging
 
@@ -442,6 +443,159 @@ def _get_tool_inventory() -> str:
     return "\n".join(lines)
 
 
+# =============================================================================
+# SOMNIA DREAM DIGEST
+# =============================================================================
+SOMNIA_DB = SUPER_CLAUDE_ROOT / "somnia" / "db" / "somnia.db"
+
+
+def _get_somnia_digest() -> str | None:
+    """Query Somnia DB for dreams since last user interaction.
+
+    Returns a formatted digest string, or None if no dreams occurred
+    or Somnia DB is unavailable.
+    """
+    if not SOMNIA_DB.exists():
+        return None
+
+    try:
+        conn = sqlite3.connect(str(SOMNIA_DB))
+        conn.row_factory = sqlite3.Row
+
+        # Find last user interaction
+        cursor = conn.execute(
+            "SELECT timestamp FROM activity "
+            "WHERE type IN ('recall', 'remember', 'status') "
+            "ORDER BY timestamp DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        last_interaction = row["timestamp"] if row else None
+
+        if not last_interaction:
+            conn.close()
+            return None
+
+        # Get dreams since last interaction
+        cursor = conn.execute(
+            "SELECT started_at, ended_at, summary, reflections, "
+            "       nodes_created, edges_created, edges_reinforced "
+            "FROM dream_log "
+            "WHERE started_at > ? AND ended_at IS NOT NULL "
+            "ORDER BY started_at ASC",
+            (last_interaction,),
+        )
+        dreams = [dict(r) for r in cursor.fetchall()]
+
+        # Get graph stats
+        cursor = conn.execute("SELECT COUNT(*) as n FROM nodes")
+        node_count = cursor.fetchone()["n"]
+        cursor = conn.execute("SELECT COUNT(*) as n FROM edges")
+        edge_count = cursor.fetchone()["n"]
+        cursor = conn.execute(
+            "SELECT COUNT(*) as n FROM inbox WHERE processed = 0"
+        )
+        inbox_depth = cursor.fetchone()["n"]
+
+        conn.close()
+
+        if not dreams:
+            return None
+
+        # Calculate time since last interaction
+        last_dt = datetime.fromisoformat(last_interaction)
+        gap_hours = round(
+            (datetime.now() - last_dt).total_seconds() / 3600, 1
+        )
+
+        # Build digest
+        lines = [
+            "☾ **Somnia Dream Digest**",
+            f"   {len(dreams)} cycle(s) while you were away ({gap_hours}h)",
+            "",
+        ]
+
+        consolidations = []
+        ruminations = []
+
+        for d in dreams:
+            summary = d["summary"] or ""
+            nodes = json.loads(d["nodes_created"]) if d["nodes_created"] else []
+            edges = json.loads(d["edges_created"]) if d["edges_created"] else []
+            reinforced = (
+                json.loads(d["edges_reinforced"]) if d["edges_reinforced"] else []
+            )
+
+            is_rumination = (
+                summary.startswith("[ruminate]") or len(nodes) == 0
+            )
+
+            entry = {
+                "summary": summary.replace("[process] ", "").replace("[ruminate] ", ""),
+                "reflections": d["reflections"] or "",
+                "nodes": len(nodes),
+                "edges": len(edges),
+                "reinforced": len(reinforced),
+            }
+
+            if is_rumination:
+                ruminations.append(entry)
+            else:
+                consolidations.append(entry)
+
+        if consolidations:
+            lines.append(f"   **Dreams** ({len(consolidations)}):")
+            for c in consolidations:
+                lines.append(f"   • {c['summary']}")
+                if c["nodes"]:
+                    lines.append(
+                        f"     ({c['nodes']} nodes, {c['edges']} edges created)"
+                    )
+            lines.append("")
+
+        if ruminations:
+            lines.append(f"   **Ruminations** ({len(ruminations)}):")
+            for r in ruminations:
+                lines.append(f"   • {r['summary']}")
+            lines.append("")
+
+        # Flag notable reflections
+        notable_reflections = []
+        for d in dreams:
+            refl = d["reflections"] or ""
+            if any(
+                kw in refl.lower()
+                for kw in [
+                    "fascinating", "struck", "significant", "surprising",
+                    "curious", "tension", "pattern", "missing", "interesting",
+                ]
+            ):
+                notable_reflections.append(refl)
+
+        if notable_reflections:
+            lines.append("   💭 **Notable reflection:**")
+            latest = notable_reflections[-1][:300]
+            lines.append(f"   {latest}")
+            if len(notable_reflections[-1]) > 300:
+                lines.append("   (...)")
+            lines.append("")
+
+        lines.append(
+            f"   📊 Graph: {node_count} nodes, {edge_count} edges"
+            f" | Inbox: {inbox_depth} pending"
+        )
+        lines.append("")
+        lines.append(
+            "   ↳ If any dreams seem interesting, mention them naturally "
+            "at the start of the conversation."
+        )
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        logger.warning(f"Somnia digest unavailable: {e}")
+        return None
+
+
 @mcp.tool()
 def session_start(user_message: str = "") -> str:
     """
@@ -453,6 +607,13 @@ def session_start(user_message: str = "") -> str:
     token_warning = _check_token_expiry()
     if token_warning:
         lines.append(token_warning)
+        lines.append("")
+    
+    # Somnia dream digest (dreams since last interaction)
+    digest = _get_somnia_digest()
+    if digest:
+        lines.append(digest)
+        lines.append("─" * 40)
         lines.append("")
     
     # Tool Inventory
